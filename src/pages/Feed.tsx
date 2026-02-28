@@ -4,7 +4,6 @@ import { supabase } from "@/integrations/supabase/client";
 import Navbar from "@/components/landing/Navbar";
 import ReviewCard from "@/components/ReviewCard";
 import ReviewDetailModal from "@/components/ReviewDetailModal";
-import UserSearch from "@/components/UserSearch";
 import FeedFilters from "@/components/FeedFilters";
 
 const Feed = () => {
@@ -17,28 +16,17 @@ const Feed = () => {
   const { data: reviews, isLoading } = useQuery({
     queryKey: ["feed-reviews", brand, category, terrain, sort],
     queryFn: async () => {
+      // First get reviews
       let query = supabase
         .from("reviews")
-        .select(`
-          *,
-          model:models(id, name, category, brand_id, brand:brands(name)),
-          profile:profiles!reviews_user_id_fkey(username, avatar_url, display_name, user_id)
-        `);
+        .select(`*, model:models(id, name, category, brand_id, brand:brands(name))`);
 
       if (terrain !== "all") query = query.eq("terrain", terrain as any);
       if (sort === "recent") query = query.order("created_at", { ascending: false });
       else if (sort === "rating") query = query.order("rating", { ascending: false });
 
       const { data, error } = await query.limit(50);
-
-      if (error) {
-        const { data: fallback } = await supabase
-          .from("reviews")
-          .select(`*, model:models(id, name, category, brand_id, brand:brands(name))`)
-          .order("created_at", { ascending: false })
-          .limit(50);
-        return (fallback ?? []).map((r: any) => ({ ...r, profile: null }));
-      }
+      if (error) return [];
 
       let filtered = data ?? [];
       if (brand !== "all") {
@@ -47,21 +35,29 @@ const Feed = () => {
       if (category !== "all") {
         filtered = filtered.filter((r: any) => r.model?.category === category);
       }
-      return filtered;
+
+      // Fetch profiles for all user_ids
+      const userIds = [...new Set(filtered.map((r: any) => r.user_id).filter(Boolean))];
+      let profileMap: Record<string, any> = {};
+      if (userIds.length > 0) {
+        const { data: profiles } = await supabase
+          .from("profiles")
+          .select("user_id, username, display_name, avatar_url")
+          .in("user_id", userIds);
+        profileMap = Object.fromEntries((profiles ?? []).map((p: any) => [p.user_id, p]));
+      }
+
+      return filtered.map((r: any) => ({
+        ...r,
+        profile: r.user_id ? profileMap[r.user_id] || null : null,
+      }));
     },
   });
 
   return (
     <div className="min-h-screen bg-background">
       <Navbar />
-      <main className="container mx-auto px-4 py-8 max-w-2xl">
-        <div className="flex items-center justify-between mb-6 gap-4">
-          <h1 className="text-3xl font-bold font-display shrink-0">Feed</h1>
-          <div className="w-full max-w-xs">
-            <UserSearch />
-          </div>
-        </div>
-
+      <main className="container mx-auto px-4 py-6 max-w-2xl">
         <FeedFilters
           brand={brand} category={category} terrain={terrain} sort={sort}
           onBrandChange={setBrand} onCategoryChange={setCategory}

@@ -8,12 +8,14 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Camera } from "lucide-react";
 import { toast } from "sonner";
 
 const EditProfile = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [saving, setSaving] = useState(false);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
 
   const [username, setUsername] = useState("");
   const [displayName, setDisplayName] = useState("");
@@ -24,6 +26,7 @@ const EditProfile = () => {
   const [footSize, setFootSize] = useState("");
   const [footWidth, setFootWidth] = useState("");
   const [weeklyVolume, setWeeklyVolume] = useState("");
+  const [avatarUrl, setAvatarUrl] = useState("");
 
   const { data: profile, isLoading } = useQuery({
     queryKey: ["own-profile", user?.id],
@@ -50,8 +53,27 @@ const EditProfile = () => {
       setFootSize(profile.foot_size?.toString() ?? "");
       setFootWidth(profile.foot_width ?? "");
       setWeeklyVolume(profile.weekly_volume ?? "");
+      setAvatarUrl(profile.avatar_url ?? "");
     }
   }, [profile]);
+
+  const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !user) return;
+    setUploadingAvatar(true);
+    try {
+      const ext = file.name.split(".").pop();
+      const path = `${user.id}/avatar.${ext}`;
+      const { error: uploadError } = await supabase.storage.from("avatars").upload(path, file, { upsert: true });
+      if (uploadError) throw uploadError;
+      const { data: urlData } = supabase.storage.from("avatars").getPublicUrl(path);
+      setAvatarUrl(urlData.publicUrl + "?t=" + Date.now());
+    } catch (err: any) {
+      toast.error("Failed to upload avatar: " + err.message);
+    } finally {
+      setUploadingAvatar(false);
+    }
+  };
 
   const handleSave = async () => {
     if (!user) return;
@@ -68,6 +90,7 @@ const EditProfile = () => {
         foot_size: footSize ? parseFloat(footSize) : null,
         foot_width: (footWidth as "narrow" | "regular" | "wide") || null,
         weekly_volume: (weeklyVolume as "lt_10km" | "10_30km" | "gt_30km") || null,
+        avatar_url: avatarUrl || null,
         updated_at: new Date().toISOString(),
       };
 
@@ -106,6 +129,26 @@ const EditProfile = () => {
         <h1 className="text-3xl font-bold font-display mb-6">Edit Profile</h1>
 
         <div className="space-y-4">
+          {/* Avatar upload */}
+          <div className="flex items-center gap-4">
+            <div className="relative w-20 h-20 rounded-full bg-muted flex items-center justify-center overflow-hidden shrink-0 group">
+              {avatarUrl ? (
+                <img src={avatarUrl} alt="" className="w-full h-full object-cover" />
+              ) : (
+                <span className="text-2xl font-bold text-muted-foreground">
+                  {(displayName || username || "R")[0]?.toUpperCase()}
+                </span>
+              )}
+              <label className="absolute inset-0 flex items-center justify-center bg-background/60 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer">
+                <Camera className="w-6 h-6 text-foreground" />
+                <input type="file" accept="image/*" className="hidden" onChange={handleAvatarUpload} disabled={uploadingAvatar} />
+              </label>
+            </div>
+            <div className="text-sm text-muted-foreground">
+              {uploadingAvatar ? "Uploading..." : "Hover to change photo"}
+            </div>
+          </div>
+
           <div>
             <label className="text-sm font-medium mb-2 block">Username</label>
             <Input placeholder="runnerJane" value={username} onChange={(e) => setUsername(e.target.value)} />

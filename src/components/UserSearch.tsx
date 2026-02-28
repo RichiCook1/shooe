@@ -4,7 +4,11 @@ import { Search, User } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useNavigate } from "react-router-dom";
 
-const UserSearch = () => {
+interface UserSearchProps {
+  onSelect?: () => void;
+}
+
+const UserSearch = ({ onSelect }: UserSearchProps) => {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<any[]>([]);
   const [open, setOpen] = useState(false);
@@ -44,6 +48,7 @@ const UserSearch = () => {
           onFocus={() => results.length > 0 && setOpen(true)}
           placeholder="Search runners..."
           className="pl-8 h-9"
+          autoFocus
         />
       </div>
       {open && (
@@ -52,7 +57,12 @@ const UserSearch = () => {
             <button
               key={p.user_id}
               className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-accent/50 transition-colors"
-              onClick={() => { navigate(`/profile/${p.user_id}`); setOpen(false); setQuery(""); }}
+              onClick={() => {
+                navigate(`/profile/${p.user_id}`);
+                setOpen(false);
+                setQuery("");
+                onSelect?.();
+              }}
             >
               <div className="w-7 h-7 rounded-full bg-muted flex items-center justify-center overflow-hidden shrink-0">
                 {p.avatar_url ? (

@@ -1,4 +1,5 @@
-import { Heart, MessageCircle, MapPin } from "lucide-react";
+import { useState, useRef } from "react";
+import { Heart, MessageCircle, MapPin, ChevronLeft, ChevronRight } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Link } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
@@ -17,7 +18,9 @@ const ReviewCard = ({ review, onClick }: ReviewCardProps) => {
   const brandModel = [review.model?.brand?.name, review.model?.name].filter(Boolean).join(" ");
   const displayName = review.profile?.display_name || review.profile?.username || "Anonymous";
   const avatar = review.profile?.avatar_url;
-  const firstImage = review.media_urls?.[0];
+  const images = review.media_urls ?? [];
+  const [imgIdx, setImgIdx] = useState(0);
+  const touchStart = useRef<number | null>(null);
 
   const { data: likes } = useQuery({
     queryKey: ["likes", review.id],
@@ -45,6 +48,15 @@ const ReviewCard = ({ review, onClick }: ReviewCardProps) => {
         if (like) await supabase.from("likes").delete().eq("id", like.id);
       } else {
         await supabase.from("likes").insert({ review_id: review.id, user_id: user.id });
+        // Send notification
+        if (review.user_id && review.user_id !== user.id) {
+          await supabase.from("notifications").insert({
+            user_id: review.user_id,
+            actor_id: user.id,
+            type: "like",
+            review_id: review.id,
+          });
+        }
       }
     },
     onSuccess: () => {
@@ -52,11 +64,53 @@ const ReviewCard = ({ review, onClick }: ReviewCardProps) => {
     },
   });
 
+  const handleTouchStart = (e: React.TouchEvent) => {
+    touchStart.current = e.touches[0].clientX;
+  };
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (touchStart.current === null) return;
+    const diff = touchStart.current - e.changedTouches[0].clientX;
+    if (Math.abs(diff) > 50) {
+      if (diff > 0 && imgIdx < images.length - 1) setImgIdx(imgIdx + 1);
+      if (diff < 0 && imgIdx > 0) setImgIdx(imgIdx - 1);
+    }
+    touchStart.current = null;
+  };
+
   return (
     <div className="bg-card rounded-xl border border-border overflow-hidden shadow-[var(--shadow-card)] hover:shadow-[var(--shadow-elevated)] transition-shadow cursor-pointer" onClick={onClick}>
-      {firstImage && (
-        <div className="aspect-[4/3] overflow-hidden">
-          <img src={firstImage} alt={brandModel} className="w-full h-full object-cover" />
+      {images.length > 0 && (
+        <div
+          className="relative aspect-[4/3] overflow-hidden"
+          onTouchStart={handleTouchStart}
+          onTouchEnd={handleTouchEnd}
+        >
+          <img src={images[imgIdx]} alt={brandModel} className="w-full h-full object-cover" />
+          {images.length > 1 && (
+            <>
+              {imgIdx > 0 && (
+                <button
+                  className="absolute left-2 top-1/2 -translate-y-1/2 w-7 h-7 rounded-full bg-background/70 flex items-center justify-center"
+                  onClick={(e) => { e.stopPropagation(); setImgIdx(imgIdx - 1); }}
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                </button>
+              )}
+              {imgIdx < images.length - 1 && (
+                <button
+                  className="absolute right-2 top-1/2 -translate-y-1/2 w-7 h-7 rounded-full bg-background/70 flex items-center justify-center"
+                  onClick={(e) => { e.stopPropagation(); setImgIdx(imgIdx + 1); }}
+                >
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+              )}
+              <div className="absolute bottom-2 left-1/2 -translate-x-1/2 flex gap-1">
+                {images.map((_: string, i: number) => (
+                  <span key={i} className={`w-1.5 h-1.5 rounded-full ${i === imgIdx ? "bg-primary-foreground" : "bg-primary-foreground/40"}`} />
+                ))}
+              </div>
+            </>
+          )}
         </div>
       )}
       <div className="p-4 space-y-3">
