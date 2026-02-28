@@ -1,5 +1,5 @@
 import { useState, useRef } from "react";
-import { Heart, MessageCircle, MapPin, ChevronLeft, ChevronRight } from "lucide-react";
+import { Heart, MessageCircle, MapPin, ChevronLeft, ChevronRight, Bookmark, Share2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Link } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
@@ -10,9 +10,10 @@ import { toast } from "sonner";
 interface ReviewCardProps {
   review: any;
   onClick?: () => void;
+  onShare?: (review: any) => void;
 }
 
-const ReviewCard = ({ review, onClick }: ReviewCardProps) => {
+const ReviewCard = ({ review, onClick, onShare }: ReviewCardProps) => {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const brandModel = [review.model?.brand?.name, review.model?.name].filter(Boolean).join(" ");
@@ -38,6 +39,16 @@ const ReviewCard = ({ review, onClick }: ReviewCardProps) => {
     },
   });
 
+  const { data: isSaved } = useQuery({
+    queryKey: ["saved", review.id, user?.id],
+    queryFn: async () => {
+      if (!user) return false;
+      const { data } = await supabase.from("saved_reviews").select("id").eq("user_id", user.id).eq("review_id", review.id).maybeSingle();
+      return !!data;
+    },
+    enabled: !!user,
+  });
+
   const isLiked = likes?.some((l: any) => l.user_id === user?.id);
 
   const likeMutation = useMutation({
@@ -48,7 +59,6 @@ const ReviewCard = ({ review, onClick }: ReviewCardProps) => {
         if (like) await supabase.from("likes").delete().eq("id", like.id);
       } else {
         await supabase.from("likes").insert({ review_id: review.id, user_id: user.id });
-        // Send notification
         if (review.user_id && review.user_id !== user.id) {
           await supabase.from("notifications").insert({
             user_id: review.user_id,
@@ -59,14 +69,25 @@ const ReviewCard = ({ review, onClick }: ReviewCardProps) => {
         }
       }
     },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["likes", review.id] }),
+  });
+
+  const saveMutation = useMutation({
+    mutationFn: async () => {
+      if (!user) { toast.error("Log in to save reviews"); return; }
+      if (isSaved) {
+        await supabase.from("saved_reviews").delete().eq("user_id", user.id).eq("review_id", review.id);
+      } else {
+        await supabase.from("saved_reviews").insert({ user_id: user.id, review_id: review.id });
+      }
+    },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["likes", review.id] });
+      queryClient.invalidateQueries({ queryKey: ["saved", review.id, user?.id] });
+      toast.success(isSaved ? "Removed from saved" : "Review saved!");
     },
   });
 
-  const handleTouchStart = (e: React.TouchEvent) => {
-    touchStart.current = e.touches[0].clientX;
-  };
+  const handleTouchStart = (e: React.TouchEvent) => { touchStart.current = e.touches[0].clientX; };
   const handleTouchEnd = (e: React.TouchEvent) => {
     if (touchStart.current === null) return;
     const diff = touchStart.current - e.changedTouches[0].clientX;
@@ -80,27 +101,17 @@ const ReviewCard = ({ review, onClick }: ReviewCardProps) => {
   return (
     <div className="bg-card rounded-xl border border-border overflow-hidden shadow-[var(--shadow-card)] hover:shadow-[var(--shadow-elevated)] transition-shadow cursor-pointer" onClick={onClick}>
       {images.length > 0 && (
-        <div
-          className="relative aspect-[4/3] overflow-hidden"
-          onTouchStart={handleTouchStart}
-          onTouchEnd={handleTouchEnd}
-        >
+        <div className="relative aspect-[4/3] overflow-hidden" onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd}>
           <img src={images[imgIdx]} alt={brandModel} className="w-full h-full object-cover" />
           {images.length > 1 && (
             <>
               {imgIdx > 0 && (
-                <button
-                  className="absolute left-2 top-1/2 -translate-y-1/2 w-7 h-7 rounded-full bg-background/70 flex items-center justify-center"
-                  onClick={(e) => { e.stopPropagation(); setImgIdx(imgIdx - 1); }}
-                >
+                <button className="absolute left-2 top-1/2 -translate-y-1/2 w-7 h-7 rounded-full bg-background/70 flex items-center justify-center" onClick={(e) => { e.stopPropagation(); setImgIdx(imgIdx - 1); }}>
                   <ChevronLeft className="w-4 h-4" />
                 </button>
               )}
               {imgIdx < images.length - 1 && (
-                <button
-                  className="absolute right-2 top-1/2 -translate-y-1/2 w-7 h-7 rounded-full bg-background/70 flex items-center justify-center"
-                  onClick={(e) => { e.stopPropagation(); setImgIdx(imgIdx + 1); }}
-                >
+                <button className="absolute right-2 top-1/2 -translate-y-1/2 w-7 h-7 rounded-full bg-background/70 flex items-center justify-center" onClick={(e) => { e.stopPropagation(); setImgIdx(imgIdx + 1); }}>
                   <ChevronRight className="w-4 h-4" />
                 </button>
               )}
@@ -110,6 +121,13 @@ const ReviewCard = ({ review, onClick }: ReviewCardProps) => {
                 ))}
               </div>
             </>
+          )}
+          {/* Rating overlay on image */}
+          {review.rating != null && (
+            <div className="absolute top-3 right-3 bg-background/90 backdrop-blur-sm rounded-lg px-2.5 py-1 shadow-sm">
+              <span className="text-lg font-bold font-display text-primary">{review.rating}</span>
+              <span className="text-xs text-muted-foreground">/10</span>
+            </div>
           )}
         </div>
       )}
@@ -125,9 +143,7 @@ const ReviewCard = ({ review, onClick }: ReviewCardProps) => {
               {avatar ? (
                 <img src={avatar} alt="" className="w-full h-full object-cover" />
               ) : (
-                <span className="text-xs font-bold text-muted-foreground">
-                  {displayName[0]?.toUpperCase()}
-                </span>
+                <span className="text-xs font-bold text-muted-foreground">{displayName[0]?.toUpperCase()}</span>
               )}
             </div>
             <span className="text-sm font-medium truncate">{displayName}</span>
@@ -137,11 +153,14 @@ const ReviewCard = ({ review, onClick }: ReviewCardProps) => {
           </span>
         </div>
 
-        {/* Shoe + rating */}
+        {/* Shoe + rating (for no-image reviews) */}
         <div className="flex items-center justify-between">
           <h3 className="font-display font-bold text-lg">{brandModel || "Unknown Shoe"}</h3>
-          {review.rating != null && (
-            <span className="text-xl font-bold font-display text-primary">{review.rating}</span>
+          {review.rating != null && images.length === 0 && (
+            <div className="flex items-baseline gap-0.5">
+              <span className="text-xl font-bold font-display text-primary">{review.rating}</span>
+              <span className="text-xs text-muted-foreground">/10</span>
+            </div>
           )}
         </div>
 
@@ -175,6 +194,19 @@ const ReviewCard = ({ review, onClick }: ReviewCardProps) => {
             <MessageCircle className="w-4 h-4" />
             <span>{commentCount ?? 0}</span>
           </button>
+          <div className="ml-auto flex items-center gap-2">
+            {onShare && (
+              <button className="text-sm hover:text-primary transition-colors" onClick={(e) => { e.stopPropagation(); onShare(review); }}>
+                <Share2 className="w-4 h-4" />
+              </button>
+            )}
+            <button
+              className={`text-sm hover:text-primary transition-colors ${isSaved ? "text-primary" : ""}`}
+              onClick={(e) => { e.stopPropagation(); saveMutation.mutate(); }}
+            >
+              <Bookmark className={`w-4 h-4 ${isSaved ? "fill-primary" : ""}`} />
+            </button>
+          </div>
         </div>
       </div>
     </div>
