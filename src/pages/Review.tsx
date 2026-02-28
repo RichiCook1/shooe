@@ -1,6 +1,7 @@
 import { useState, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
 import Navbar from "@/components/landing/Navbar";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -8,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Slider } from "@/components/ui/slider";
+import LocationAutocomplete from "@/components/LocationAutocomplete";
 import { ArrowLeft, ArrowRight, Camera, Check, MapPin, Mountain, Navigation, X } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
@@ -17,6 +19,7 @@ const STEPS: Step[] = ["media", "shoe", "details", "tags", "done"];
 
 const Review = () => {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [step, setStep] = useState<Step>("media");
   const [photos, setPhotos] = useState<File[]>([]);
   const [photoPreviews, setPhotoPreviews] = useState<string[]>([]);
@@ -137,9 +140,10 @@ const Review = () => {
     setSubmitting(true);
     try {
       const mediaUrls: string[] = [];
+      const folder = user ? `user/${user.id}` : "guest";
       for (const photo of photos) {
         const ext = photo.name.split(".").pop();
-        const path = `guest/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+        const path = `${folder}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
         const { error: uploadError } = await supabase.storage.from("review-media").upload(path, photo);
         if (uploadError) throw uploadError;
         const { data: urlData } = supabase.storage.from("review-media").getPublicUrl(path);
@@ -148,9 +152,7 @@ const Review = () => {
 
       let modelId = selectedModel;
 
-      // If custom brand/model, create them first
       if (useCustomBrand && customBrand && customModel) {
-        // Try to find or create brand
         let brandId: string;
         const { data: existingBrand } = await supabase.from("brands").select("id").ilike("name", customBrand).maybeSingle();
         if (existingBrand) {
@@ -158,7 +160,6 @@ const Review = () => {
         } else {
           const { data: newBrand, error: brandErr } = await supabase.from("brands").insert({ name: customBrand }).select().single();
           if (brandErr) {
-            // Brand insert may fail due to RLS (admin only), so use a placeholder approach
             toast.error("Custom brands require admin approval. Please select from the list.");
             setSubmitting(false);
             return;
@@ -180,7 +181,13 @@ const Review = () => {
         }
       }
 
-      const guestSessionId = crypto.randomUUID();
+      const isLoggedIn = !!user;
+      const guestSessionId = isLoggedIn ? null : crypto.randomUUID();
+
+      // Store guest session for later claim
+      if (!isLoggedIn && guestSessionId) {
+        localStorage.setItem("guest_session_id", guestSessionId);
+      }
 
       const { data: review, error } = await supabase.from("reviews").insert({
         model_id: modelId,
@@ -189,8 +196,9 @@ const Review = () => {
         location: location || null,
         terrain: (terrain as "road" | "trail" | "mixed" | "track") || null,
         media_urls: mediaUrls,
-        is_guest: true,
+        is_guest: !isLoggedIn,
         guest_session_id: guestSessionId,
+        user_id: isLoggedIn ? user.id : null,
         rating,
       }).select().single();
 
@@ -285,11 +293,7 @@ const Review = () => {
                     </div>
                   ) : null}
                   {selectedBrand && (
-                    <button
-                      type="button"
-                      onClick={() => setUseCustomModel(!useCustomModel)}
-                      className="text-sm text-primary hover:underline"
-                    >
+                    <button type="button" onClick={() => setUseCustomModel(!useCustomModel)} className="text-sm text-primary hover:underline">
                       {useCustomModel ? "← Back to model list" : "Model not listed? Type it manually"}
                     </button>
                   )}
@@ -349,7 +353,7 @@ const Review = () => {
                   <MapPin className="w-4 h-4" /> Location
                 </label>
                 <div className="flex gap-2">
-                  <Input placeholder="e.g. Central Park, NYC" value={location} onChange={(e) => setLocation(e.target.value)} className="flex-1" />
+                  <LocationAutocomplete value={location} onChange={setLocation} className="flex-1" />
                   <Button type="button" variant="outline" size="icon" onClick={handleGeolocate} disabled={geoLoading} title="Use my location">
                     <Navigation className={`w-4 h-4 ${geoLoading ? "animate-spin" : ""}`} />
                   </Button>
@@ -367,18 +371,10 @@ const Review = () => {
               <p className="text-muted-foreground mb-6">Score the shoe, select tags, and share your thoughts.</p>
             </div>
 
-            {/* Overall Score */}
             <div>
               <label className="text-sm font-medium mb-3 block">Overall Score</label>
               <div className="flex items-center gap-4">
-                <Slider
-                  value={[rating]}
-                  onValueChange={(v) => setRating(v[0])}
-                  min={0}
-                  max={10}
-                  step={0.5}
-                  className="flex-1"
-                />
+                <Slider value={[rating]} onValueChange={(v) => setRating(v[0])} min={0} max={10} step={0.5} className="flex-1" />
                 <span className="text-2xl font-bold font-display min-w-[3ch] text-center text-primary">{rating}</span>
               </div>
               <div className="flex justify-between text-xs text-muted-foreground mt-1">
@@ -425,12 +421,7 @@ const Review = () => {
 
             <div>
               <label className="text-sm font-medium mb-2 block">Your Review (optional)</label>
-              <Textarea
-                placeholder="How did these shoes feel on your run? Any standout moments?"
-                value={content}
-                onChange={(e) => setContent(e.target.value)}
-                rows={5}
-              />
+              <Textarea placeholder="How did these shoes feel on your run? Any standout moments?" value={content} onChange={(e) => setContent(e.target.value)} rows={5} />
             </div>
           </div>
         )}
@@ -442,17 +433,30 @@ const Review = () => {
               <Check className="w-8 h-8 text-success" />
             </div>
             <h1 className="text-3xl font-bold font-display mb-3">Review Submitted!</h1>
-            <p className="text-muted-foreground mb-8 max-w-md mx-auto">
-              Thanks for sharing your experience. Sign up to save this review to your profile and follow other runners.
-            </p>
-            <div className="flex flex-col sm:flex-row gap-3 justify-center">
-              <Button onClick={() => navigate("/login")} className="bg-gradient-hero text-primary-foreground hover:opacity-90">
-                Sign Up to Save
-              </Button>
-              <Button variant="outline" onClick={() => navigate("/")}>
-                Back to Home
-              </Button>
-            </div>
+            {user ? (
+              <>
+                <p className="text-muted-foreground mb-8 max-w-md mx-auto">
+                  Your review has been saved to your profile. Check it out in the feed!
+                </p>
+                <Button onClick={() => navigate("/feed")} className="bg-gradient-hero text-primary-foreground hover:opacity-90">
+                  View Feed
+                </Button>
+              </>
+            ) : (
+              <>
+                <p className="text-muted-foreground mb-8 max-w-md mx-auto">
+                  Thanks for sharing your experience. Sign up to save this review to your profile and follow other runners.
+                </p>
+                <div className="flex flex-col sm:flex-row gap-3 justify-center">
+                  <Button onClick={() => navigate("/login")} className="bg-gradient-hero text-primary-foreground hover:opacity-90">
+                    Sign Up to Save
+                  </Button>
+                  <Button variant="outline" onClick={() => navigate("/")}>
+                    Back to Home
+                  </Button>
+                </div>
+              </>
+            )}
           </div>
         )}
 

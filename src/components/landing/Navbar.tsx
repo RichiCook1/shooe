@@ -1,7 +1,8 @@
 import { Button } from "@/components/ui/button";
 import { Link, useNavigate } from "react-router-dom";
-import { PenSquare, LogOut, User, Rss } from "lucide-react";
+import { PenSquare, LogOut, User, Rss, Search } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
+import UserSearch from "@/components/UserSearch";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -21,12 +22,18 @@ const Navbar = () => {
 
   return (
     <header className="sticky top-0 z-50 w-full bg-background/80 backdrop-blur-lg border-b border-border">
-      <div className="container mx-auto px-4 h-16 flex items-center justify-between">
-        <Link to={user ? "/feed" : "/"} className="flex items-center gap-2">
+      <div className="container mx-auto px-4 h-16 flex items-center justify-between gap-4">
+        <Link to={user ? "/feed" : "/"} className="flex items-center gap-2 shrink-0">
           <span className="text-xl font-bold font-display text-gradient">RunReview</span>
         </Link>
 
-        <div className="flex items-center gap-3">
+        {user && (
+          <div className="hidden sm:block w-full max-w-xs">
+            <UserSearch />
+          </div>
+        )}
+
+        <div className="flex items-center gap-3 shrink-0">
           <Link to="/review">
             <Button size="sm" className="bg-gradient-hero text-primary-foreground hover:opacity-90 gap-1.5">
               <PenSquare className="w-4 h-4" />
