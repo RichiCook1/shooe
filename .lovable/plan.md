@@ -1,88 +1,83 @@
 
 
-# RunReview – Social Review Platform for Running Shoes
+# Fix Auth Flow & Build Authenticated User Experience
 
-## Overview
-A full-stack social review platform where runners share shoe reviews with photos, tags, and stats. Includes a public review flow, Instagram-style profiles, a social feed, and a full admin dashboard. Built on Lovable Cloud with AI-powered shoe detection.
-
----
-
-## Phase 1: Foundation & Database
-Set up Lovable Cloud with the complete database schema:
-- **Users & Profiles** – auth, demographics, running profile, foot details
-- **Brands & Models** – structured shoe database with specs (drop, stack height, weight, MSRP)
-- **Reviews** – linked to users and models, with media, tags, distance, location, terrain
-- **Tags** – dynamic positive/negative tags stored in a tags table (admin-editable)
-- **Social tables** – follows, likes, comments
-- **Storage** – buckets for shoe photos, profile photos, and review media
-
-Seed with **~20 demo users** and **~50+ reviews** across popular brands (Nike, Hoka, Brooks, Salomon, ASICS, New Balance, etc.) with realistic running profiles and review content.
+## Problems Identified
+1. After email verification, user lands on `/` (landing page) with no authenticated experience
+2. After manual login, user is navigated to `/` which is still just the landing page
+3. No Feed page, Profile page, or any authenticated views exist
+4. Navbar always shows "Log In" -- never adapts to show logged-in user options
+5. No global auth state listener (`onAuthStateChange`) to detect when user confirms email and auto-logs in
 
 ---
 
-## Phase 2: Public Landing Page & Review Flow
-- **Landing page** – clean, athletic design (Strava/Instagram inspired) with hero section, featured reviews, and two CTAs: "Log In / Sign Up" and "Leave a Review"
-- **Multi-step review flow** (no login required):
-  1. **Upload Media** – mobile-first photo upload (shoe photo required, optional environment/action shots)
-  2. **AI Shoe Detection** – send shoe image to Lovable AI (Gemini vision) to suggest brand/model with confidence scores; fallback to manual input
-  3. **Run Details** – optional distance, location, terrain type
-  4. **Tag & Review** – select positive/negative tags (dynamic from DB), optional written review
-  5. **Account CTA** – prompt to sign up to save review to profile, or continue as guest
+## Solution
+
+### 1. Auth Context Provider
+Create `src/contexts/AuthContext.tsx` -- a global auth provider that:
+- Listens to `onAuthStateChange` (handles email confirmation auto-login)
+- Exposes `user`, `session`, `loading`, `signOut` to the whole app
+- Wraps the app in `App.tsx`
+
+### 2. New Pages
+
+**Feed Page (`src/pages/Feed.tsx`)**
+- The "home" for logged-in users
+- Shows reviews from followed users, trending reviews, recommended reviews
+- Sort by recent / relevant
+- Infinite scroll with pagination
+
+**Profile Page (`src/pages/Profile.tsx`)**
+- Instagram-style layout: avatar, bio, running stats, follower/following counts
+- Grid of user's reviews
+- Edit profile button (own profile)
+- Route: `/profile/:userId` and `/profile` (own profile shortcut)
+
+**Edit Profile Page (`src/pages/EditProfile.tsx`)**
+- Form to update: avatar, username, display name, bio, demographics, running profile
+- All optional fields from the sign-up spec
+
+### 3. Updated Navbar
+- When logged out: show "Log In" + "Leave a Review"
+- When logged in: show avatar dropdown with links to Feed, My Profile, Settings, Log Out + "Leave a Review" button
+
+### 4. Updated Login Page
+- After successful login, navigate to `/feed` instead of `/`
+- After signup, show confirmation message (already works)
+- `onAuthStateChange` in AuthContext will detect email confirmation and redirect to `/feed`
+
+### 5. Smart Landing Page Redirect
+- If user visits `/` while authenticated, auto-redirect to `/feed`
+
+### 6. Updated App.tsx Routes
+Add routes:
+- `/feed` -- Feed page
+- `/profile` -- Own profile
+- `/profile/:userId` -- Public profile view
+- `/edit-profile` -- Edit profile
 
 ---
 
-## Phase 3: Authentication & Sign-Up
-- Email + password authentication via Lovable Cloud
-- **Modular sign-up flow** collecting:
-  - Basic info (email, username, password)
-  - Demographics (age, height, weight, foot size/width) – optional
-  - Running profile (weekly volume, running types, goals, terrain) – optional
-- Guest reviews get attached to account upon sign-up
-- Login/logout with session management
+## Technical Details
 
----
+### Files to Create
+- `src/contexts/AuthContext.tsx` -- auth state provider with `onAuthStateChange`
+- `src/pages/Feed.tsx` -- personalized feed with review cards
+- `src/pages/Profile.tsx` -- Instagram-style profile with review grid
+- `src/pages/EditProfile.tsx` -- profile editing form
+- `src/components/ReviewCard.tsx` -- reusable review card (used in feed + profile)
+- `src/components/ProtectedRoute.tsx` -- redirects to `/login` if not authenticated
 
-## Phase 4: User Profiles (Instagram-Style)
-- **Profile page** with photo, bio, running stats, shoe preferences
-- **Review grid** – visual grid of all user reviews with shoe photos
-- **Follow/unfollow** system with follower/following counts
-- **Public profiles** – viewable by anyone
-- Like and comment on reviews
+### Files to Modify
+- `src/App.tsx` -- wrap with AuthProvider, add new routes
+- `src/components/landing/Navbar.tsx` -- auth-aware navbar with user dropdown
+- `src/pages/Login.tsx` -- redirect to `/feed` after login; handle email confirmation redirect
+- `src/pages/Index.tsx` -- redirect authenticated users to `/feed`
 
----
-
-## Phase 5: Social Feed
-- Personalized feed showing:
-  - Reviews from followed users
-  - Trending shoe reviews
-  - Recommended reviews based on running profile, terrain, and shoe preferences
-- Sort by most recent or most relevant
-- Infinite scroll
-
----
-
-## Phase 6: Repeat Reviews & Shoe Timeline
-- Users can review the same shoe multiple times
-- **Shoe timeline view** showing how opinions evolve over distance (e.g., at 50km, 200km, 500km)
-- Timestamped review history per shoe per user
-
----
-
-## Phase 7: Admin Dashboard
-- **CRM** – view all users with demographics, running profiles, engagement metrics; export to CSV/Excel
-- **Review Analytics** – reviews per brand/model, tag frequency analysis, terrain breakdown, engagement rates, geographic data
-- **Field Manager** – dynamically add/edit/remove positive tags, negative tags, running profile questions, terrain options, volume ranges, and goal options
-- **Shoe Database Manager** – CRUD for brands and models with all specs
-- Charts and data visualizations using Recharts
-
----
-
-## Design Direction
-- Minimal, sport-focused aesthetic
-- Dark/light mode support
-- High-contrast UI with clean typography
-- Mobile-first responsive design
-- Instagram-like profile grid layouts
-- Strava-inspired activity and stats visuals
-- Accent color: energetic coral/orange paired with dark neutrals
+### Auth Flow After Changes
+1. User signs up -> sees "check your email" message
+2. User clicks email link -> `onAuthStateChange` fires with `SIGNED_IN` event -> auto-redirect to `/feed`
+3. User logs in manually -> redirect to `/feed`
+4. User visits `/` while logged in -> redirect to `/feed`
+5. Navbar shows avatar + dropdown when logged in
 
