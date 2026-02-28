@@ -67,17 +67,21 @@ const Feed = () => {
         )}
         <ReviewDetailModal review={selectedReview} open={!!selectedReview} onOpenChange={(open) => !open && setSelectedReview(null)} onShare={handleShare} />
 
-        {/* Share review modal - pick a user to send to */}
+        {/* Share review modal */}
         <Dialog open={!!shareReview} onOpenChange={(open) => !open && setShareReview(null)}>
-          <DialogContent className="max-w-sm">
-            <h3 className="text-lg font-bold font-display mb-2">Share review</h3>
-            <p className="text-sm text-muted-foreground mb-3">Search for a user to send this review to:</p>
-            <UserSearch onSelect={(userId) => {
-              if (shareReview && userId) {
-                navigate(`/messages?to=${userId}&reviewId=${shareReview.id}`);
-                setShareReview(null);
-              }
-            }} returnUserId />
+          <DialogContent className="max-w-sm mx-4">
+            <div className="space-y-4 pt-2">
+              <div>
+                <h3 className="text-lg font-bold font-display">Share review</h3>
+                <p className="text-sm text-muted-foreground mt-1">Search for a user to send this review to:</p>
+              </div>
+              <UserSearch onSelect={(userId) => {
+                if (shareReview && userId) {
+                  navigate(`/messages?to=${userId}&reviewId=${shareReview.id}`);
+                  setShareReview(null);
+                }
+              }} returnUserId />
+            </div>
           </DialogContent>
         </Dialog>
       </main>

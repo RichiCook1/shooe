@@ -5,16 +5,19 @@ import { useAuth } from "@/contexts/AuthContext";
 import Navbar from "@/components/landing/Navbar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Send, ArrowLeft, MessageCircle, Star } from "lucide-react";
+import { Send, ArrowLeft, MessageCircle, Star, Image as ImageIcon } from "lucide-react";
 import { Link, useSearchParams } from "react-router-dom";
+import ReviewDetailModal from "@/components/ReviewDetailModal";
 
 const Messages = () => {
   const { user } = useAuth();
   const queryClient = useQueryClient();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [activeConvo, setActiveConvo] = useState<string | null>(null);
   const [messageText, setMessageText] = useState("");
+  const [viewReview, setViewReview] = useState<any>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const sharedReviewSent = useRef(false);
   const targetUserId = searchParams.get("to");
   const sharedReviewId = searchParams.get("reviewId");
 
@@ -42,16 +45,16 @@ const Messages = () => {
 
   // Auto-create conversation if navigating with ?to= param
   useEffect(() => {
-    if (!targetUserId || !user || !conversations) return;
+    if (!targetUserId || !user || !conversations || sharedReviewSent.current) return;
     const existing = conversations.find((c: any) => c.otherUserId === targetUserId);
     if (existing) {
       setActiveConvo(existing.id);
-      // If sharing a review, send it automatically
       if (sharedReviewId) {
+        sharedReviewSent.current = true;
         sendSharedReview(existing.id, sharedReviewId);
+        setSearchParams({});
       }
     } else {
-      // Create new conversation
       const createConvo = async () => {
         const [u1, u2] = [user.id, targetUserId].sort();
         const { data } = await supabase.from("conversations").insert({ user1_id: u1, user2_id: u2 }).select().single();
@@ -59,7 +62,9 @@ const Messages = () => {
           queryClient.invalidateQueries({ queryKey: ["conversations", user.id] });
           setActiveConvo(data.id);
           if (sharedReviewId) {
+            sharedReviewSent.current = true;
             sendSharedReview(data.id, sharedReviewId);
+            setSearchParams({});
           }
         }
       };
@@ -89,12 +94,24 @@ const Messages = () => {
         .select("*")
         .eq("conversation_id", activeConvo)
         .order("created_at", { ascending: true });
-      // Fetch shared reviews
+      // Fetch shared reviews with thumbnail
       const reviewIds = [...new Set((data ?? []).filter((m: any) => m.review_id).map((m: any) => m.review_id))];
       let reviewMap: Record<string, any> = {};
       if (reviewIds.length > 0) {
-        const { data: reviews } = await supabase.from("reviews").select("id, rating, model:models(name, brand:brands(name))").in("id", reviewIds);
-        reviewMap = Object.fromEntries((reviews ?? []).map((r: any) => [r.id, r]));
+        const { data: reviews } = await supabase
+          .from("reviews")
+          .select("id, rating, media_urls, content, terrain, distance_km, location, user_id, created_at, model_id, model:models(id, name, category, image_url, brand_id, brand:brands(name))")
+          .in("id", reviewIds);
+        if (reviews) {
+          // Get profiles for reviews
+          const userIds = [...new Set(reviews.map((r: any) => r.user_id).filter(Boolean))];
+          let profileMap: Record<string, any> = {};
+          if (userIds.length > 0) {
+            const { data: profiles } = await supabase.from("profiles").select("user_id, username, display_name, avatar_url").in("user_id", userIds);
+            profileMap = Object.fromEntries((profiles ?? []).map((p: any) => [p.user_id, p]));
+          }
+          reviewMap = Object.fromEntries(reviews.map((r: any) => [r.id, { ...r, profile: r.user_id ? profileMap[r.user_id] || null : null }]));
+        }
       }
       return (data ?? []).map((m: any) => ({ ...m, sharedReview: m.review_id ? reviewMap[m.review_id] : null }));
     },
@@ -138,7 +155,6 @@ const Messages = () => {
         content: messageText.trim(),
       });
       await supabase.from("conversations").update({ updated_at: new Date().toISOString() }).eq("id", activeConvo);
-      // Send notification
       const convo = conversations?.find((c: any) => c.id === activeConvo);
       if (convo) {
         await supabase.from("notifications").insert({
@@ -158,13 +174,12 @@ const Messages = () => {
   const activeConvoData = conversations?.find((c: any) => c.id === activeConvo);
 
   return (
-    <div className="min-h-screen bg-background flex flex-col">
+    <div className="h-[100dvh] bg-background flex flex-col">
       <Navbar />
-      <div className="flex-1 flex max-w-2xl mx-auto w-full">
-        {/* Conversations list or chat */}
+      <div className="flex-1 flex flex-col max-w-2xl mx-auto w-full min-h-0">
         {!activeConvo ? (
-          <div className="flex-1 flex flex-col">
-            <div className="p-4 border-b border-border">
+          <div className="flex-1 flex flex-col min-h-0">
+            <div className="p-4 border-b border-border shrink-0">
               <h1 className="text-lg font-bold font-display">Messages</h1>
             </div>
             {conversations && conversations.length > 0 ? (
@@ -202,9 +217,9 @@ const Messages = () => {
             )}
           </div>
         ) : (
-          <div className="flex-1 flex flex-col">
+          <div className="flex-1 flex flex-col min-h-0">
             {/* Chat header */}
-            <div className="flex items-center gap-3 p-4 border-b border-border">
+            <div className="flex items-center gap-3 p-4 border-b border-border shrink-0">
               <button onClick={() => setActiveConvo(null)} className="w-8 h-8 rounded-full flex items-center justify-center hover:bg-muted transition-colors">
                 <ArrowLeft className="w-5 h-5" />
               </button>
@@ -230,17 +245,38 @@ const Messages = () => {
                   <div key={m.id} className={`flex ${isMine ? "justify-end" : "justify-start"}`}>
                     <div className={`max-w-[75%] rounded-2xl px-4 py-2 ${isMine ? "bg-primary text-primary-foreground" : "bg-muted"}`}>
                       {m.sharedReview && (
-                        <Link to="/feed" className={`block mb-1 p-2 rounded-lg ${isMine ? "bg-primary-foreground/10" : "bg-background"}`}>
-                          <div className="flex items-center gap-1.5">
-                            <Star className="w-3.5 h-3.5" />
-                            <span className="text-xs font-medium">
-                              {[m.sharedReview?.model?.brand?.name, m.sharedReview?.model?.name].filter(Boolean).join(" ")}
-                            </span>
-                            {m.sharedReview?.rating != null && (
-                              <span className="text-xs ml-auto font-bold">{m.sharedReview.rating}/10</span>
-                            )}
+                        <button
+                          onClick={() => setViewReview(m.sharedReview)}
+                          className={`block w-full mb-1.5 rounded-lg overflow-hidden text-left ${isMine ? "bg-primary-foreground/10" : "bg-background"}`}
+                        >
+                          {/* Thumbnail */}
+                          {(m.sharedReview.media_urls?.length > 0 || m.sharedReview.model?.image_url) && (
+                            <div className="w-full h-28 relative">
+                              <img
+                                src={m.sharedReview.media_urls?.[0] || m.sharedReview.model?.image_url}
+                                alt=""
+                                className="w-full h-full object-cover"
+                              />
+                              {m.sharedReview.rating != null && (
+                                <div className="absolute top-2 right-2 bg-background/90 backdrop-blur-sm rounded px-1.5 py-0.5">
+                                  <span className="text-xs font-bold text-primary">{m.sharedReview.rating}</span>
+                                  <span className="text-[10px] text-muted-foreground">/10</span>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                          <div className="p-2">
+                            <div className="flex items-center gap-1.5">
+                              <Star className="w-3.5 h-3.5 shrink-0" />
+                              <span className="text-xs font-medium truncate">
+                                {[m.sharedReview?.model?.brand?.name, m.sharedReview?.model?.name].filter(Boolean).join(" ")}
+                              </span>
+                              {m.sharedReview?.rating != null && !m.sharedReview.media_urls?.length && !m.sharedReview.model?.image_url && (
+                                <span className="text-xs ml-auto font-bold">{m.sharedReview.rating}/10</span>
+                              )}
+                            </div>
                           </div>
-                        </Link>
+                        </button>
                       )}
                       <p className="text-sm">{m.content}</p>
                       <p className={`text-[10px] mt-1 ${isMine ? "text-primary-foreground/60" : "text-muted-foreground"}`}>
@@ -253,8 +289,8 @@ const Messages = () => {
               <div ref={messagesEndRef} />
             </div>
 
-            {/* Input */}
-            <form onSubmit={(e) => { e.preventDefault(); sendMutation.mutate(); }} className="p-4 border-t border-border flex gap-2">
+            {/* Input - fixed at bottom */}
+            <form onSubmit={(e) => { e.preventDefault(); sendMutation.mutate(); }} className="p-3 border-t border-border flex gap-2 shrink-0 bg-background">
               <Input value={messageText} onChange={(e) => setMessageText(e.target.value)} placeholder="Type a message..." className="flex-1" />
               <Button type="submit" size="icon" disabled={!messageText.trim()}>
                 <Send className="w-4 h-4" />
@@ -263,6 +299,13 @@ const Messages = () => {
           </div>
         )}
       </div>
+
+      {/* Review detail modal for shared reviews */}
+      <ReviewDetailModal
+        review={viewReview}
+        open={!!viewReview}
+        onOpenChange={(open) => !open && setViewReview(null)}
+      />
     </div>
   );
 };

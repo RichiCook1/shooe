@@ -42,18 +42,18 @@ const UserSearch = ({ onSelect, returnUserId }: UserSearchProps) => {
   return (
     <div ref={containerRef} className="relative">
       <div className="relative">
-        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
         <Input
           value={query}
           onChange={(e) => { setQuery(e.target.value); search(e.target.value); }}
           onFocus={() => results.length > 0 && setOpen(true)}
           placeholder="Search runners..."
-          className="pl-8 h-9"
+          className="pl-9 h-11 text-base rounded-xl"
           autoFocus
         />
       </div>
       {open && (
-        <div className="absolute z-50 top-full mt-1 w-full bg-popover border border-border rounded-lg shadow-lg max-h-64 overflow-y-auto">
+        <div className="absolute z-50 top-full mt-1.5 w-full bg-popover border border-border rounded-xl shadow-lg max-h-64 overflow-y-auto">
           {results.map((p) => (
             <button
               key={p.user_id}
