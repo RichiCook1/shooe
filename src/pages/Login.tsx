@@ -1,9 +1,10 @@
 import Navbar from "@/components/landing/Navbar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 
 const Login = () => {
@@ -13,6 +14,20 @@ const Login = () => {
   const [username, setUsername] = useState("");
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
+  const { user } = useAuth();
+
+  // Auto-redirect when auth state changes (e.g. email verification)
+  useEffect(() => {
+    if (user) {
+      // Claim guest reviews if any
+      const guestSessionId = localStorage.getItem("guest_session_id");
+      if (guestSessionId) {
+        supabase.rpc("claim_guest_reviews", { p_user_id: user.id, p_session_id: guestSessionId })
+          .then(() => localStorage.removeItem("guest_session_id"));
+      }
+      navigate("/feed", { replace: true });
+    }
+  }, [user, navigate]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -30,7 +45,7 @@ const Login = () => {
         const { error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) throw error;
         toast.success("Welcome back!");
-        navigate("/feed");
+        // Redirect handled by useEffect above
       }
     } catch (err: any) {
       toast.error(err.message);

@@ -411,6 +411,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      claim_guest_reviews: {
+        Args: { p_session_id: string; p_user_id: string }
+        Returns: undefined
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]

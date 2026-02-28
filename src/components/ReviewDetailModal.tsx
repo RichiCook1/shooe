@@ -1,0 +1,206 @@
+import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Heart, MapPin, MessageCircle, Send } from "lucide-react";
+import { useState } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
+import { toast } from "sonner";
+import { Link } from "react-router-dom";
+
+interface ReviewDetailModalProps {
+  review: any;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}
+
+const ReviewDetailModal = ({ review, open, onOpenChange }: ReviewDetailModalProps) => {
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
+  const [commentText, setCommentText] = useState("");
+  const [imageIdx, setImageIdx] = useState(0);
+
+  const brandModel = [review?.model?.brand?.name, review?.model?.name].filter(Boolean).join(" ");
+  const displayName = review?.profile?.display_name || review?.profile?.username || "Anonymous";
+  const images = review?.media_urls ?? [];
+
+  const { data: comments } = useQuery({
+    queryKey: ["comments", review?.id],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("comments")
+        .select("*, profile:profiles!comments_user_id_fkey(username, display_name, avatar_url)")
+        .eq("review_id", review.id)
+        .order("created_at", { ascending: true });
+      return data ?? [];
+    },
+    enabled: !!review?.id && open,
+  });
+
+  const { data: likes } = useQuery({
+    queryKey: ["likes", review?.id],
+    queryFn: async () => {
+      const { data } = await supabase.from("likes").select("id, user_id").eq("review_id", review.id);
+      return data ?? [];
+    },
+    enabled: !!review?.id && open,
+  });
+
+  const isLiked = likes?.some((l: any) => l.user_id === user?.id);
+
+  const likeMutation = useMutation({
+    mutationFn: async () => {
+      if (!user) { toast.error("Log in to like reviews"); return; }
+      if (isLiked) {
+        const like = likes?.find((l: any) => l.user_id === user.id);
+        if (like) await supabase.from("likes").delete().eq("id", like.id);
+      } else {
+        await supabase.from("likes").insert({ review_id: review.id, user_id: user.id });
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["likes", review?.id] });
+      queryClient.invalidateQueries({ queryKey: ["feed-reviews"] });
+    },
+  });
+
+  const commentMutation = useMutation({
+    mutationFn: async () => {
+      if (!user) { toast.error("Log in to comment"); return; }
+      if (!commentText.trim()) return;
+      await supabase.from("comments").insert({ review_id: review.id, user_id: user.id, content: commentText.trim() });
+      setCommentText("");
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["comments", review?.id] });
+      queryClient.invalidateQueries({ queryKey: ["feed-reviews"] });
+    },
+  });
+
+  const { data: tags } = useQuery({
+    queryKey: ["review-tags", review?.id],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("review_tags")
+        .select("tag:tags(label, type)")
+        .eq("review_id", review.id);
+      return data ?? [];
+    },
+    enabled: !!review?.id && open,
+  });
+
+  if (!review) return null;
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto p-0">
+        {/* Image carousel */}
+        {images.length > 0 && (
+          <div className="relative aspect-[4/3] bg-muted">
+            <img src={images[imageIdx]} alt="" className="w-full h-full object-cover" />
+            {images.length > 1 && (
+              <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex gap-1.5">
+                {images.map((_: string, i: number) => (
+                  <button key={i} onClick={() => setImageIdx(i)}
+                    className={`w-2 h-2 rounded-full transition-colors ${i === imageIdx ? "bg-primary-foreground" : "bg-primary-foreground/40"}`} />
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        <div className="p-5 space-y-4">
+          {/* Header */}
+          <div className="flex items-center justify-between">
+            <Link to={review.profile?.user_id ? `/profile/${review.profile.user_id}` : "#"} className="flex items-center gap-2">
+              <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center overflow-hidden">
+                {review.profile?.avatar_url ? (
+                  <img src={review.profile.avatar_url} alt="" className="w-full h-full object-cover" />
+                ) : (
+                  <span className="text-xs font-bold text-muted-foreground">{displayName[0]?.toUpperCase()}</span>
+                )}
+              </div>
+              <span className="text-sm font-medium">{displayName}</span>
+            </Link>
+            <span className="text-xs text-muted-foreground">{new Date(review.created_at).toLocaleDateString()}</span>
+          </div>
+
+          {/* Shoe + rating */}
+          <div className="flex items-center justify-between">
+            <h2 className="font-display font-bold text-xl">{brandModel || "Unknown Shoe"}</h2>
+            {review.rating != null && <span className="text-2xl font-bold font-display text-primary">{review.rating}</span>}
+          </div>
+
+          {/* Meta badges */}
+          <div className="flex flex-wrap gap-2">
+            {review.terrain && <Badge variant="secondary" className="capitalize">{review.terrain}</Badge>}
+            {review.distance_km && <Badge variant="secondary">{review.distance_km} km</Badge>}
+            {review.location && <Badge variant="secondary" className="gap-1"><MapPin className="w-3 h-3" />{review.location}</Badge>}
+          </div>
+
+          {/* Tags */}
+          {tags && tags.length > 0 && (
+            <div className="flex flex-wrap gap-1.5">
+              {tags.map((rt: any, i: number) => (
+                <Badge key={i} variant={rt.tag?.type === "positive" ? "default" : "destructive"} className="text-xs">
+                  {rt.tag?.label}
+                </Badge>
+              ))}
+            </div>
+          )}
+
+          {/* Full content */}
+          {review.content && <p className="text-sm text-foreground leading-relaxed">{review.content}</p>}
+
+          {/* Like button */}
+          <div className="flex items-center gap-4 pt-2 border-t border-border">
+            <button onClick={() => likeMutation.mutate()} className="flex items-center gap-1.5 text-sm hover:text-primary transition-colors">
+              <Heart className={`w-5 h-5 ${isLiked ? "fill-primary text-primary" : ""}`} />
+              <span>{likes?.length ?? 0}</span>
+            </button>
+            <span className="flex items-center gap-1.5 text-sm text-muted-foreground">
+              <MessageCircle className="w-5 h-5" />
+              <span>{comments?.length ?? 0}</span>
+            </span>
+          </div>
+
+          {/* Comments */}
+          <div className="space-y-3 max-h-48 overflow-y-auto">
+            {comments?.map((c: any) => (
+              <div key={c.id} className="flex gap-2">
+                <div className="w-6 h-6 rounded-full bg-muted flex items-center justify-center shrink-0 mt-0.5">
+                  <span className="text-[10px] font-bold text-muted-foreground">
+                    {(c.profile?.display_name || c.profile?.username || "A")[0]?.toUpperCase()}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-xs font-medium">{c.profile?.display_name || c.profile?.username || "Anonymous"}</span>
+                  <p className="text-sm text-muted-foreground">{c.content}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Add comment */}
+          {user && (
+            <form onSubmit={(e) => { e.preventDefault(); commentMutation.mutate(); }} className="flex gap-2">
+              <Input
+                value={commentText}
+                onChange={(e) => setCommentText(e.target.value)}
+                placeholder="Add a comment..."
+                className="flex-1 h-9"
+              />
+              <Button type="submit" size="sm" variant="ghost" disabled={!commentText.trim()}>
+                <Send className="w-4 h-4" />
+              </Button>
+            </form>
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+};
+
+export default ReviewDetailModal;
