@@ -1,0 +1,1 @@
+ALTER TABLE public.reviews ADD COLUMN rating numeric CHECK (rating >= 0 AND rating <= 10);
