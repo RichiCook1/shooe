@@ -94,56 +94,54 @@ const Navbar = () => {
   const isActive = (path: string) => location.pathname === path;
 
   return (
-    <header className="sticky top-0 z-50 w-full bg-background/80 backdrop-blur-lg border-b border-border">
-      <div className="container mx-auto px-4 h-14 flex items-center justify-between gap-2">
-        <Link to={user ? "/feed" : "/"} className="flex items-center gap-2 shrink-0">
-          <span className="text-xl font-bold font-display text-gradient">RunReview</span>
+    <header className="sticky top-0 z-50 w-full bg-background/95 backdrop-blur-sm border-b border-border">
+      <div className="container mx-auto px-4 h-12 flex items-center justify-between gap-2">
+        <Link to={user ? "/feed" : "/"} className="flex items-center shrink-0">
+          <span className="text-lg font-display tracking-wider uppercase">Sherpa</span>
         </Link>
 
         {user && (
-          <nav className="flex items-center gap-1 mx-auto">
+          <nav className="flex items-center gap-0.5 mx-auto">
             <Link to="/feed">
-              <button className={`w-9 h-9 rounded-full flex items-center justify-center transition-colors ${isActive("/feed") ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground hover:bg-muted"}`}>
-                <Rss className="w-5 h-5" />
+              <button className={`w-8 h-8 rounded-md flex items-center justify-center transition-colors ${isActive("/feed") ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}>
+                <Rss className="w-4 h-4" />
               </button>
             </Link>
             <button
-              className={`w-9 h-9 rounded-full flex items-center justify-center transition-colors ${searchOpen ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground hover:bg-muted"}`}
+              className={`w-8 h-8 rounded-md flex items-center justify-center transition-colors ${searchOpen ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}
               onClick={() => setSearchOpen(true)}
             >
-              <Search className="w-5 h-5" />
+              <Search className="w-4 h-4" />
             </button>
           </nav>
         )}
 
-        <div className="flex items-center gap-1.5 shrink-0">
+        <div className="flex items-center gap-1 shrink-0">
           <Link to="/review">
-            <button className="w-9 h-9 rounded-lg bg-gradient-hero flex items-center justify-center text-primary-foreground hover:opacity-90 transition-opacity">
-              <PenSquare className="w-4.5 h-4.5" />
+            <button className="w-8 h-8 rounded-md bg-primary flex items-center justify-center text-primary-foreground hover:opacity-80 transition-opacity">
+              <PenSquare className="w-4 h-4" />
             </button>
           </Link>
 
           {user ? (
             <>
-              {/* Messages */}
               <Link to="/messages">
-                <button className="relative w-9 h-9 rounded-full flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">
-                  <MessageCircle className="w-5 h-5" />
+                <button className="relative w-8 h-8 rounded-md flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors">
+                  <MessageCircle className="w-4 h-4" />
                   {(unreadMsgCount ?? 0) > 0 && (
-                    <span className="absolute -top-0.5 -right-0.5 w-4 h-4 rounded-full bg-destructive text-destructive-foreground text-[10px] flex items-center justify-center font-bold">
+                    <span className="absolute -top-0.5 -right-0.5 w-3.5 h-3.5 rounded-full bg-foreground text-background text-[9px] flex items-center justify-center font-bold">
                       {unreadMsgCount! > 9 ? "9+" : unreadMsgCount}
                     </span>
                   )}
                 </button>
               </Link>
 
-              {/* Notifications */}
               <DropdownMenu onOpenChange={(open) => { if (open && (unreadCount ?? 0) > 0) markAllRead.mutate(); }}>
                 <DropdownMenuTrigger asChild>
-                  <button className="relative w-9 h-9 rounded-full flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">
-                    <Bell className="w-5 h-5" />
+                  <button className="relative w-8 h-8 rounded-md flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors">
+                    <Bell className="w-4 h-4" />
                     {(unreadCount ?? 0) > 0 && (
-                      <span className="absolute -top-0.5 -right-0.5 w-4 h-4 rounded-full bg-primary text-primary-foreground text-[10px] flex items-center justify-center font-bold">
+                      <span className="absolute -top-0.5 -right-0.5 w-3.5 h-3.5 rounded-full bg-foreground text-background text-[9px] flex items-center justify-center font-bold">
                         {unreadCount! > 9 ? "9+" : unreadCount}
                       </span>
                     )}
@@ -172,16 +170,15 @@ const Navbar = () => {
                 </DropdownMenuContent>
               </DropdownMenu>
 
-              {/* User menu */}
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <button className="w-9 h-9 rounded-full bg-muted flex items-center justify-center hover:ring-2 hover:ring-primary/30 transition-all overflow-hidden">
-                    <User className="w-4.5 h-4.5 text-muted-foreground" />
+                  <button className="w-8 h-8 rounded-md bg-muted flex items-center justify-center hover:bg-muted/70 transition-colors overflow-hidden">
+                    <User className="w-4 h-4 text-muted-foreground" />
                   </button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-48">
+                <DropdownMenuContent align="end" className="w-44">
                   <DropdownMenuItem onClick={() => navigate("/profile")} className="gap-2 cursor-pointer">
-                    <User className="w-4 h-4" /> My Profile
+                    <User className="w-4 h-4" /> Profile
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem onClick={handleSignOut} className="gap-2 cursor-pointer text-destructive">
@@ -192,17 +189,16 @@ const Navbar = () => {
             </>
           ) : (
             <Link to="/login">
-              <Button variant="ghost" size="sm" className="h-8 text-xs">Log In</Button>
+              <Button variant="ghost" size="sm" className="h-8 text-xs uppercase tracking-wider font-medium">Log In</Button>
             </Link>
           )}
         </div>
       </div>
 
-      {/* Search Modal */}
       <Dialog open={searchOpen} onOpenChange={setSearchOpen}>
         <DialogContent className="max-w-md mx-4">
           <div className="pt-2 space-y-3">
-            <h3 className="text-lg font-bold font-display">Search runners</h3>
+            <h3 className="text-2xl font-display uppercase tracking-wider">Find Runners</h3>
             <UserSearch onSelect={() => setSearchOpen(false)} />
           </div>
         </DialogContent>
