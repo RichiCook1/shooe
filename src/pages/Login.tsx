@@ -59,11 +59,11 @@ const Login = () => {
       <Navbar />
       <main className="container mx-auto px-4 py-16 max-w-md">
         <div className="text-center mb-8 animate-fade-in">
-          <h1 className="text-3xl font-bold font-display mb-2">
-            {isSignUp ? "Create Account" : "Welcome Back"}
+          <h1 className="text-4xl font-display uppercase tracking-wider mb-2">
+            {isSignUp ? "Join Sherpa" : "Welcome Back"}
           </h1>
-          <p className="text-muted-foreground">
-            {isSignUp ? "Join the RunReview community" : "Log in to your account"}
+          <p className="text-sm text-muted-foreground">
+            {isSignUp ? "Create your account" : "Sign in to continue"}
           </p>
         </div>
 
@@ -83,7 +83,7 @@ const Login = () => {
             <Input type="password" placeholder="••••••••" value={password} onChange={(e) => setPassword(e.target.value)} required minLength={6} />
           </div>
 
-          <Button type="submit" disabled={loading} className="w-full bg-gradient-hero text-primary-foreground hover:opacity-90 h-11">
+          <Button type="submit" disabled={loading} className="w-full h-11 uppercase tracking-wider text-sm font-medium">
             {loading ? "Please wait..." : isSignUp ? "Sign Up" : "Log In"}
           </Button>
 
