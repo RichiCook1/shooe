@@ -7,28 +7,27 @@ import ReviewCard from "@/components/ReviewCard";
 import ReviewDetailModal from "@/components/ReviewDetailModal";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Link } from "react-router-dom";
-import { Settings, UserPlus, UserMinus } from "lucide-react";
+import { Link, useNavigate } from "react-router-dom";
+import { Settings, UserPlus, UserMinus, MessageCircle, X } from "lucide-react";
 import { toast } from "sonner";
 import { useState } from "react";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
 
 const Profile = () => {
   const { userId } = useParams();
   const { user } = useAuth();
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const profileUserId = userId || user?.id;
   const isOwnProfile = profileUserId === user?.id;
   const [selectedReview, setSelectedReview] = useState<any>(null);
+  const [followListType, setFollowListType] = useState<"followers" | "following" | null>(null);
 
   const { data: profile, isLoading: profileLoading } = useQuery({
     queryKey: ["profile", profileUserId],
     queryFn: async () => {
       if (!profileUserId) return null;
-      const { data } = await supabase
-        .from("profiles")
-        .select("*")
-        .eq("user_id", profileUserId)
-        .maybeSingle();
+      const { data } = await supabase.from("profiles").select("*").eq("user_id", profileUserId).maybeSingle();
       return data;
     },
     enabled: !!profileUserId,
@@ -38,11 +37,7 @@ const Profile = () => {
     queryKey: ["user-reviews", profileUserId],
     queryFn: async () => {
       if (!profileUserId) return [];
-      const { data } = await supabase
-        .from("reviews")
-        .select(`*, model:models(name, brand:brands(name))`)
-        .eq("user_id", profileUserId)
-        .order("created_at", { ascending: false });
+      const { data } = await supabase.from("reviews").select(`*, model:models(name, brand:brands(name))`).eq("user_id", profileUserId).order("created_at", { ascending: false });
       return data ?? [];
     },
     enabled: !!profileUserId,
@@ -65,15 +60,26 @@ const Profile = () => {
     queryKey: ["is-following", user?.id, profileUserId],
     queryFn: async () => {
       if (!user || !profileUserId || isOwnProfile) return false;
-      const { data } = await supabase
-        .from("follows")
-        .select("id")
-        .eq("follower_id", user.id)
-        .eq("following_id", profileUserId)
-        .maybeSingle();
+      const { data } = await supabase.from("follows").select("id").eq("follower_id", user.id).eq("following_id", profileUserId).maybeSingle();
       return !!data;
     },
     enabled: !!user && !!profileUserId && !isOwnProfile,
+  });
+
+  // Followers/following list
+  const { data: followList } = useQuery({
+    queryKey: ["follow-list", profileUserId, followListType],
+    queryFn: async () => {
+      if (!profileUserId || !followListType) return [];
+      const col = followListType === "followers" ? "follower_id" : "following_id";
+      const filterCol = followListType === "followers" ? "following_id" : "follower_id";
+      const { data } = await supabase.from("follows").select(col).eq(filterCol, profileUserId);
+      if (!data || data.length === 0) return [];
+      const userIds = data.map((f: any) => f[col]);
+      const { data: profiles } = await supabase.from("profiles").select("user_id, username, display_name, avatar_url").in("user_id", userIds);
+      return profiles ?? [];
+    },
+    enabled: !!profileUserId && !!followListType,
   });
 
   const followMutation = useMutation({
@@ -83,12 +89,7 @@ const Profile = () => {
         await supabase.from("follows").delete().eq("follower_id", user.id).eq("following_id", profileUserId);
       } else {
         await supabase.from("follows").insert({ follower_id: user.id, following_id: profileUserId });
-        // Notification
-        await supabase.from("notifications").insert({
-          user_id: profileUserId,
-          actor_id: user.id,
-          type: "follow",
-        });
+        await supabase.from("notifications").insert({ user_id: profileUserId, actor_id: user.id, type: "follow" });
       }
     },
     onSuccess: () => {
@@ -121,9 +122,7 @@ const Profile = () => {
             {profile?.avatar_url ? (
               <img src={profile.avatar_url} alt="" className="w-full h-full object-cover" />
             ) : (
-              <span className="text-2xl font-bold text-muted-foreground">
-                {displayName[0]?.toUpperCase()}
-              </span>
+              <span className="text-2xl font-bold text-muted-foreground">{displayName[0]?.toUpperCase()}</span>
             )}
           </div>
           <div className="flex-1 min-w-0">
@@ -132,20 +131,29 @@ const Profile = () => {
               {isOwnProfile ? (
                 <Link to="/edit-profile">
                   <Button variant="outline" size="sm" className="gap-1.5">
-                    <Settings className="w-4 h-4" />
-                    Edit
+                    <Settings className="w-4 h-4" /> Edit
                   </Button>
                 </Link>
               ) : user ? (
-                <Button
-                  variant={isFollowing ? "outline" : "default"}
-                  size="sm"
-                  className="gap-1.5"
-                  onClick={() => followMutation.mutate()}
-                  disabled={followMutation.isPending}
-                >
-                  {isFollowing ? <><UserMinus className="w-4 h-4" /> Unfollow</> : <><UserPlus className="w-4 h-4" /> Follow</>}
-                </Button>
+                <div className="flex gap-2">
+                  <Button
+                    variant={isFollowing ? "outline" : "default"}
+                    size="sm"
+                    className="gap-1.5"
+                    onClick={() => followMutation.mutate()}
+                    disabled={followMutation.isPending}
+                  >
+                    {isFollowing ? <><UserMinus className="w-4 h-4" /> Unfollow</> : <><UserPlus className="w-4 h-4" /> Follow</>}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="gap-1.5"
+                    onClick={() => navigate(`/messages?to=${profileUserId}`)}
+                  >
+                    <MessageCircle className="w-4 h-4" /> Message
+                  </Button>
+                </div>
               ) : null}
             </div>
             {profile?.username && <p className="text-sm text-muted-foreground">@{profile.username}</p>}
@@ -154,8 +162,12 @@ const Profile = () => {
             {/* Stats */}
             <div className="flex gap-6 mt-4 text-sm">
               <div><span className="font-bold">{reviews?.length ?? 0}</span> <span className="text-muted-foreground">reviews</span></div>
-              <div><span className="font-bold">{followCounts?.followers ?? 0}</span> <span className="text-muted-foreground">followers</span></div>
-              <div><span className="font-bold">{followCounts?.following ?? 0}</span> <span className="text-muted-foreground">following</span></div>
+              <button onClick={() => setFollowListType("followers")} className="hover:underline">
+                <span className="font-bold">{followCounts?.followers ?? 0}</span> <span className="text-muted-foreground">followers</span>
+              </button>
+              <button onClick={() => setFollowListType("following")} className="hover:underline">
+                <span className="font-bold">{followCounts?.following ?? 0}</span> <span className="text-muted-foreground">following</span>
+              </button>
             </div>
 
             {/* Running info */}
@@ -187,6 +199,37 @@ const Profile = () => {
         )}
 
         <ReviewDetailModal review={selectedReview} open={!!selectedReview} onOpenChange={(open) => !open && setSelectedReview(null)} />
+
+        {/* Follow list modal */}
+        <Dialog open={!!followListType} onOpenChange={(open) => !open && setFollowListType(null)}>
+          <DialogContent className="max-w-sm">
+            <h3 className="text-lg font-bold font-display capitalize mb-4">{followListType}</h3>
+            <div className="space-y-2 max-h-64 overflow-y-auto">
+              {followList && followList.length > 0 ? followList.map((p: any) => (
+                <Link
+                  key={p.user_id}
+                  to={`/profile/${p.user_id}`}
+                  onClick={() => setFollowListType(null)}
+                  className="flex items-center gap-3 p-2 rounded-lg hover:bg-muted/50 transition-colors"
+                >
+                  <div className="w-9 h-9 rounded-full bg-muted flex items-center justify-center overflow-hidden shrink-0">
+                    {p.avatar_url ? (
+                      <img src={p.avatar_url} alt="" className="w-full h-full object-cover" />
+                    ) : (
+                      <span className="text-xs font-bold text-muted-foreground">{(p.display_name || p.username || "?")[0]?.toUpperCase()}</span>
+                    )}
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium truncate">{p.display_name || p.username || "Runner"}</p>
+                    {p.username && <p className="text-xs text-muted-foreground">@{p.username}</p>}
+                  </div>
+                </Link>
+              )) : (
+                <p className="text-sm text-muted-foreground text-center py-4">No {followListType} yet</p>
+              )}
+            </div>
+          </DialogContent>
+        </Dialog>
       </main>
     </div>
   );

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Link, useNavigate, useLocation } from "react-router-dom";
-import { PenSquare, LogOut, User, Rss, Search, Bell } from "lucide-react";
+import { PenSquare, LogOut, User, Rss, Search, Bell, MessageCircle } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import UserSearch from "@/components/UserSearch";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -40,6 +40,28 @@ const Navbar = () => {
     },
     enabled: !!user,
     refetchInterval: 30000,
+  });
+
+  const { data: unreadMsgCount } = useQuery({
+    queryKey: ["unread-messages", user?.id],
+    queryFn: async () => {
+      if (!user) return 0;
+      const { data: convos } = await supabase
+        .from("conversations")
+        .select("id")
+        .or(`user1_id.eq.${user.id},user2_id.eq.${user.id}`);
+      if (!convos || convos.length === 0) return 0;
+      const convoIds = convos.map((c: any) => c.id);
+      const { count } = await supabase
+        .from("messages")
+        .select("id", { count: "exact", head: true })
+        .in("conversation_id", convoIds)
+        .neq("sender_id", user.id)
+        .eq("read", false);
+      return count ?? 0;
+    },
+    enabled: !!user,
+    refetchInterval: 15000,
   });
 
   const markAllRead = useMutation({
@@ -81,36 +103,45 @@ const Navbar = () => {
         {user && (
           <nav className="flex items-center gap-1 mx-auto">
             <Link to="/feed">
-              <Button variant={isActive("/feed") ? "default" : "ghost"} size="sm" className="gap-1.5 h-8 text-xs">
-                <Rss className="w-3.5 h-3.5" /> Feed
-              </Button>
+              <button className={`w-9 h-9 rounded-full flex items-center justify-center transition-colors ${isActive("/feed") ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground hover:bg-muted"}`}>
+                <Rss className="w-5 h-5" />
+              </button>
             </Link>
-            <Button variant="ghost" size="sm" className="gap-1.5 h-8 text-xs" onClick={() => setSearchOpen(true)}>
-              <Search className="w-3.5 h-3.5" /> Search
-            </Button>
-            <Link to="/profile">
-              <Button variant={isActive("/profile") ? "default" : "ghost"} size="sm" className="gap-1.5 h-8 text-xs">
-                <User className="w-3.5 h-3.5" /> Profile
-              </Button>
-            </Link>
+            <button
+              className={`w-9 h-9 rounded-full flex items-center justify-center transition-colors ${searchOpen ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground hover:bg-muted"}`}
+              onClick={() => setSearchOpen(true)}
+            >
+              <Search className="w-5 h-5" />
+            </button>
           </nav>
         )}
 
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="flex items-center gap-1.5 shrink-0">
           <Link to="/review">
-            <Button size="sm" className="bg-gradient-hero text-primary-foreground hover:opacity-90 gap-1.5 h-8 text-xs">
-              <PenSquare className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">Review</span>
-            </Button>
+            <button className="w-9 h-9 rounded-lg bg-gradient-hero flex items-center justify-center text-primary-foreground hover:opacity-90 transition-opacity">
+              <PenSquare className="w-4.5 h-4.5" />
+            </button>
           </Link>
 
           {user ? (
             <>
+              {/* Messages */}
+              <Link to="/messages">
+                <button className="relative w-9 h-9 rounded-full flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">
+                  <MessageCircle className="w-5 h-5" />
+                  {(unreadMsgCount ?? 0) > 0 && (
+                    <span className="absolute -top-0.5 -right-0.5 w-4 h-4 rounded-full bg-destructive text-destructive-foreground text-[10px] flex items-center justify-center font-bold">
+                      {unreadMsgCount! > 9 ? "9+" : unreadMsgCount}
+                    </span>
+                  )}
+                </button>
+              </Link>
+
               {/* Notifications */}
               <DropdownMenu onOpenChange={(open) => { if (open && (unreadCount ?? 0) > 0) markAllRead.mutate(); }}>
                 <DropdownMenuTrigger asChild>
-                  <button className="relative w-8 h-8 rounded-full flex items-center justify-center hover:bg-muted transition-colors">
-                    <Bell className="w-4 h-4 text-muted-foreground" />
+                  <button className="relative w-9 h-9 rounded-full flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">
+                    <Bell className="w-5 h-5" />
                     {(unreadCount ?? 0) > 0 && (
                       <span className="absolute -top-0.5 -right-0.5 w-4 h-4 rounded-full bg-primary text-primary-foreground text-[10px] flex items-center justify-center font-bold">
                         {unreadCount! > 9 ? "9+" : unreadCount}
@@ -122,11 +153,12 @@ const Navbar = () => {
                   {notifications && notifications.length > 0 ? (
                     notifications.map((n: any) => {
                       const actorName = n.actor?.display_name || n.actor?.username || "Someone";
-                      const msg = n.type === "like" ? "liked your review" : n.type === "comment" ? "commented on your review" : "started following you";
+                      const msg = n.type === "like" ? "liked your review" : n.type === "comment" ? "commented on your review" : n.type === "message" ? "sent you a message" : "started following you";
                       return (
                         <DropdownMenuItem key={n.id} className={`flex-col items-start gap-0.5 cursor-pointer ${!n.read ? "bg-accent/30" : ""}`}
                           onClick={() => {
                             if (n.type === "follow") navigate(`/profile/${n.actor_id}`);
+                            else if (n.type === "message") navigate("/messages");
                             else if (n.review_id) navigate("/feed");
                           }}>
                           <span className="text-sm"><span className="font-medium">{actorName}</span> {msg}</span>
@@ -143,8 +175,8 @@ const Navbar = () => {
               {/* User menu */}
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <button className="w-8 h-8 rounded-full bg-muted flex items-center justify-center hover:ring-2 hover:ring-primary/30 transition-all overflow-hidden">
-                    <User className="w-4 h-4 text-muted-foreground" />
+                  <button className="w-9 h-9 rounded-full bg-muted flex items-center justify-center hover:ring-2 hover:ring-primary/30 transition-all overflow-hidden">
+                    <User className="w-4.5 h-4.5 text-muted-foreground" />
                   </button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="w-48">

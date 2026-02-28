@@ -5,10 +5,11 @@ import { supabase } from "@/integrations/supabase/client";
 import { useNavigate } from "react-router-dom";
 
 interface UserSearchProps {
-  onSelect?: () => void;
+  onSelect?: (userId?: string) => void;
+  returnUserId?: boolean;
 }
 
-const UserSearch = ({ onSelect }: UserSearchProps) => {
+const UserSearch = ({ onSelect, returnUserId }: UserSearchProps) => {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<any[]>([]);
   const [open, setOpen] = useState(false);
@@ -58,10 +59,14 @@ const UserSearch = ({ onSelect }: UserSearchProps) => {
               key={p.user_id}
               className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-accent/50 transition-colors"
               onClick={() => {
-                navigate(`/profile/${p.user_id}`);
+                if (returnUserId) {
+                  onSelect?.(p.user_id);
+                } else {
+                  navigate(`/profile/${p.user_id}`);
+                  onSelect?.();
+                }
                 setOpen(false);
                 setQuery("");
-                onSelect?.();
               }}
             >
               <div className="w-7 h-7 rounded-full bg-muted flex items-center justify-center overflow-hidden shrink-0">

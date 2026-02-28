@@ -2,7 +2,7 @@ import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Heart, MapPin, MessageCircle, Send, ChevronLeft, ChevronRight } from "lucide-react";
+import { Heart, MapPin, MessageCircle, Send, ChevronLeft, ChevronRight, Bookmark, Share2 } from "lucide-react";
 import { useState, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -14,9 +14,10 @@ interface ReviewDetailModalProps {
   review: any;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  onShare?: (review: any) => void;
 }
 
-const ReviewDetailModal = ({ review, open, onOpenChange }: ReviewDetailModalProps) => {
+const ReviewDetailModal = ({ review, open, onOpenChange, onShare }: ReviewDetailModalProps) => {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const [commentText, setCommentText] = useState("");
@@ -30,18 +31,10 @@ const ReviewDetailModal = ({ review, open, onOpenChange }: ReviewDetailModalProp
   const { data: comments } = useQuery({
     queryKey: ["comments", review?.id],
     queryFn: async () => {
-      const { data } = await supabase
-        .from("comments")
-        .select("*")
-        .eq("review_id", review.id)
-        .order("created_at", { ascending: true });
+      const { data } = await supabase.from("comments").select("*").eq("review_id", review.id).order("created_at", { ascending: true });
       if (!data) return [];
-      // Fetch profiles for commenters
       const userIds = [...new Set(data.map((c: any) => c.user_id))];
-      const { data: profiles } = await supabase
-        .from("profiles")
-        .select("user_id, username, display_name, avatar_url")
-        .in("user_id", userIds);
+      const { data: profiles } = await supabase.from("profiles").select("user_id, username, display_name, avatar_url").in("user_id", userIds);
       const profileMap = Object.fromEntries((profiles ?? []).map((p: any) => [p.user_id, p]));
       return data.map((c: any) => ({ ...c, profile: profileMap[c.user_id] || null }));
     },
@@ -57,6 +50,16 @@ const ReviewDetailModal = ({ review, open, onOpenChange }: ReviewDetailModalProp
     enabled: !!review?.id && open,
   });
 
+  const { data: isSaved } = useQuery({
+    queryKey: ["saved", review?.id, user?.id],
+    queryFn: async () => {
+      if (!user) return false;
+      const { data } = await supabase.from("saved_reviews").select("id").eq("user_id", user.id).eq("review_id", review.id).maybeSingle();
+      return !!data;
+    },
+    enabled: !!review?.id && !!user && open,
+  });
+
   const isLiked = likes?.some((l: any) => l.user_id === user?.id);
 
   const likeMutation = useMutation({
@@ -68,17 +71,25 @@ const ReviewDetailModal = ({ review, open, onOpenChange }: ReviewDetailModalProp
       } else {
         await supabase.from("likes").insert({ review_id: review.id, user_id: user.id });
         if (review.user_id && review.user_id !== user.id) {
-          await supabase.from("notifications").insert({
-            user_id: review.user_id,
-            actor_id: user.id,
-            type: "like",
-            review_id: review.id,
-          });
+          await supabase.from("notifications").insert({ user_id: review.user_id, actor_id: user.id, type: "like", review_id: review.id });
         }
       }
     },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["likes", review?.id] }),
+  });
+
+  const saveMutation = useMutation({
+    mutationFn: async () => {
+      if (!user) { toast.error("Log in to save reviews"); return; }
+      if (isSaved) {
+        await supabase.from("saved_reviews").delete().eq("user_id", user.id).eq("review_id", review.id);
+      } else {
+        await supabase.from("saved_reviews").insert({ user_id: user.id, review_id: review.id });
+      }
+    },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["likes", review?.id] });
+      queryClient.invalidateQueries({ queryKey: ["saved", review?.id, user?.id] });
+      toast.success(isSaved ? "Removed from saved" : "Review saved!");
     },
   });
 
@@ -86,19 +97,9 @@ const ReviewDetailModal = ({ review, open, onOpenChange }: ReviewDetailModalProp
     mutationFn: async () => {
       if (!user) { toast.error("Log in to comment"); return; }
       if (!commentText.trim()) return;
-      const { data: comment } = await supabase
-        .from("comments")
-        .insert({ review_id: review.id, user_id: user.id, content: commentText.trim() })
-        .select()
-        .single();
+      const { data: comment } = await supabase.from("comments").insert({ review_id: review.id, user_id: user.id, content: commentText.trim() }).select().single();
       if (comment && review.user_id && review.user_id !== user.id) {
-        await supabase.from("notifications").insert({
-          user_id: review.user_id,
-          actor_id: user.id,
-          type: "comment",
-          review_id: review.id,
-          comment_id: comment.id,
-        });
+        await supabase.from("notifications").insert({ user_id: review.user_id, actor_id: user.id, type: "comment", review_id: review.id, comment_id: comment.id });
       }
       setCommentText("");
     },
@@ -111,10 +112,7 @@ const ReviewDetailModal = ({ review, open, onOpenChange }: ReviewDetailModalProp
   const { data: tags } = useQuery({
     queryKey: ["review-tags", review?.id],
     queryFn: async () => {
-      const { data } = await supabase
-        .from("review_tags")
-        .select("tag:tags(label, type)")
-        .eq("review_id", review.id);
+      const { data } = await supabase.from("review_tags").select("tag:tags(label, type)").eq("review_id", review.id);
       return data ?? [];
     },
     enabled: !!review?.id && open,
@@ -136,13 +134,8 @@ const ReviewDetailModal = ({ review, open, onOpenChange }: ReviewDetailModalProp
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto p-0">
-        {/* Image carousel with swipe */}
         {images.length > 0 && (
-          <div
-            className="relative aspect-[4/3] bg-muted"
-            onTouchStart={handleTouchStart}
-            onTouchEnd={handleTouchEnd}
-          >
+          <div className="relative aspect-[4/3] bg-muted" onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd}>
             <img src={images[imageIdx]} alt="" className="w-full h-full object-cover" />
             {images.length > 1 && (
               <>
@@ -158,8 +151,7 @@ const ReviewDetailModal = ({ review, open, onOpenChange }: ReviewDetailModalProp
                 )}
                 <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex gap-1.5">
                   {images.map((_: string, i: number) => (
-                    <button key={i} onClick={() => setImageIdx(i)}
-                      className={`w-2 h-2 rounded-full transition-colors ${i === imageIdx ? "bg-primary-foreground" : "bg-primary-foreground/40"}`} />
+                    <button key={i} onClick={() => setImageIdx(i)} className={`w-2 h-2 rounded-full transition-colors ${i === imageIdx ? "bg-primary-foreground" : "bg-primary-foreground/40"}`} />
                   ))}
                 </div>
               </>
@@ -168,7 +160,6 @@ const ReviewDetailModal = ({ review, open, onOpenChange }: ReviewDetailModalProp
         )}
 
         <div className="p-5 space-y-4">
-          {/* Header */}
           <div className="flex items-center justify-between">
             <Link to={review.profile?.user_id ? `/profile/${review.profile.user_id}` : "#"} className="flex items-center gap-2">
               <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center overflow-hidden">
@@ -183,34 +174,32 @@ const ReviewDetailModal = ({ review, open, onOpenChange }: ReviewDetailModalProp
             <span className="text-xs text-muted-foreground">{new Date(review.created_at).toLocaleDateString()}</span>
           </div>
 
-          {/* Shoe + rating */}
           <div className="flex items-center justify-between">
             <h2 className="font-display font-bold text-xl">{brandModel || "Unknown Shoe"}</h2>
-            {review.rating != null && <span className="text-2xl font-bold font-display text-primary">{review.rating}</span>}
+            {review.rating != null && (
+              <div className="flex items-baseline gap-1">
+                <span className="text-3xl font-bold font-display text-primary">{review.rating}</span>
+                <span className="text-sm text-muted-foreground">/10</span>
+              </div>
+            )}
           </div>
 
-          {/* Meta badges */}
           <div className="flex flex-wrap gap-2">
             {review.terrain && <Badge variant="secondary" className="capitalize">{review.terrain}</Badge>}
             {review.distance_km && <Badge variant="secondary">{review.distance_km} km</Badge>}
             {review.location && <Badge variant="secondary" className="gap-1"><MapPin className="w-3 h-3" />{review.location}</Badge>}
           </div>
 
-          {/* Tags */}
           {tags && tags.length > 0 && (
             <div className="flex flex-wrap gap-1.5">
               {tags.map((rt: any, i: number) => (
-                <Badge key={i} variant={rt.tag?.type === "positive" ? "default" : "destructive"} className="text-xs">
-                  {rt.tag?.label}
-                </Badge>
+                <Badge key={i} variant={rt.tag?.type === "positive" ? "default" : "destructive"} className="text-xs">{rt.tag?.label}</Badge>
               ))}
             </div>
           )}
 
-          {/* Full content */}
           {review.content && <p className="text-sm text-foreground leading-relaxed">{review.content}</p>}
 
-          {/* Like button */}
           <div className="flex items-center gap-4 pt-2 border-t border-border">
             <button onClick={() => likeMutation.mutate()} className="flex items-center gap-1.5 text-sm hover:text-primary transition-colors">
               <Heart className={`w-5 h-5 ${isLiked ? "fill-primary text-primary" : ""}`} />
@@ -220,9 +209,18 @@ const ReviewDetailModal = ({ review, open, onOpenChange }: ReviewDetailModalProp
               <MessageCircle className="w-5 h-5" />
               <span>{comments?.length ?? 0}</span>
             </span>
+            <div className="ml-auto flex items-center gap-3">
+              {onShare && (
+                <button onClick={() => onShare(review)} className="text-sm hover:text-primary transition-colors">
+                  <Share2 className="w-5 h-5" />
+                </button>
+              )}
+              <button onClick={() => saveMutation.mutate()} className={`text-sm hover:text-primary transition-colors ${isSaved ? "text-primary" : ""}`}>
+                <Bookmark className={`w-5 h-5 ${isSaved ? "fill-primary" : ""}`} />
+              </button>
+            </div>
           </div>
 
-          {/* Comments */}
           <div className="space-y-3 max-h-48 overflow-y-auto">
             {comments?.map((c: any) => (
               <div key={c.id} className="flex gap-2">
@@ -230,9 +228,7 @@ const ReviewDetailModal = ({ review, open, onOpenChange }: ReviewDetailModalProp
                   {c.profile?.avatar_url ? (
                     <img src={c.profile.avatar_url} alt="" className="w-full h-full object-cover" />
                   ) : (
-                    <span className="text-[10px] font-bold text-muted-foreground">
-                      {(c.profile?.display_name || c.profile?.username || "A")[0]?.toUpperCase()}
-                    </span>
+                    <span className="text-[10px] font-bold text-muted-foreground">{(c.profile?.display_name || c.profile?.username || "A")[0]?.toUpperCase()}</span>
                   )}
                 </div>
                 <div>
@@ -243,15 +239,9 @@ const ReviewDetailModal = ({ review, open, onOpenChange }: ReviewDetailModalProp
             ))}
           </div>
 
-          {/* Add comment */}
           {user && (
             <form onSubmit={(e) => { e.preventDefault(); commentMutation.mutate(); }} className="flex gap-2">
-              <Input
-                value={commentText}
-                onChange={(e) => setCommentText(e.target.value)}
-                placeholder="Add a comment..."
-                className="flex-1 h-9"
-              />
+              <Input value={commentText} onChange={(e) => setCommentText(e.target.value)} placeholder="Add a comment..." className="flex-1 h-9" />
               <Button type="submit" size="sm" variant="ghost" disabled={!commentText.trim()}>
                 <Send className="w-4 h-4" />
               </Button>
