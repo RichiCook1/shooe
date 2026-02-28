@@ -50,6 +50,17 @@ const ReviewDetailModal = ({ review, open, onOpenChange, onShare }: ReviewDetail
     enabled: !!review?.id && open,
   });
 
+  const { data: likerProfiles } = useQuery({
+    queryKey: ["liker-profiles", review?.id],
+    queryFn: async () => {
+      if (!likes || likes.length === 0) return [];
+      const userIds = likes.map((l: any) => l.user_id);
+      const { data: profiles } = await supabase.from("profiles").select("user_id, username, display_name, avatar_url").in("user_id", userIds);
+      return profiles ?? [];
+    },
+    enabled: !!likes && likes.length > 0 && open,
+  });
+
   const { data: isSaved } = useQuery({
     queryKey: ["saved", review?.id, user?.id],
     queryFn: async () => {
@@ -220,6 +231,32 @@ const ReviewDetailModal = ({ review, open, onOpenChange, onShare }: ReviewDetail
               </button>
             </div>
           </div>
+
+          {/* Who liked */}
+          {likerProfiles && likerProfiles.length > 0 && (
+            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <div className="flex -space-x-1.5">
+                {likerProfiles.slice(0, 5).map((p: any) => (
+                  <Link key={p.user_id} to={`/profile/${p.user_id}`} className="w-5 h-5 rounded-full bg-muted border border-background flex items-center justify-center overflow-hidden">
+                    {p.avatar_url ? (
+                      <img src={p.avatar_url} alt="" className="w-full h-full object-cover" />
+                    ) : (
+                      <span className="text-[8px] font-bold text-muted-foreground">{(p.display_name || p.username || "?")[0]?.toUpperCase()}</span>
+                    )}
+                  </Link>
+                ))}
+              </div>
+              <span>
+                Liked by{" "}
+                <Link to={`/profile/${likerProfiles[0].user_id}`} className="font-medium text-foreground hover:underline">
+                  {likerProfiles[0].display_name || likerProfiles[0].username || "someone"}
+                </Link>
+                {likerProfiles.length > 1 && (
+                  <> and {likerProfiles.length - 1} other{likerProfiles.length > 2 ? "s" : ""}</>
+                )}
+              </span>
+            </div>
+          )}
 
           <div className="space-y-3 max-h-48 overflow-y-auto">
             {comments?.map((c: any) => (

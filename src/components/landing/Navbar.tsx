@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Link, useNavigate, useLocation } from "react-router-dom";
-import { PenSquare, LogOut, User, Rss, Search, Bell, MessageCircle } from "lucide-react";
+import { PenSquare, LogOut, User, Rss, Search, Bell, MessageCircle, Bookmark } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import UserSearch from "@/components/UserSearch";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -179,6 +179,9 @@ const Navbar = () => {
                 <DropdownMenuContent align="end" className="w-44">
                   <DropdownMenuItem onClick={() => navigate("/profile")} className="gap-2 cursor-pointer">
                     <User className="w-4 h-4" /> Profile
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => navigate("/saved")} className="gap-2 cursor-pointer">
+                    <Bookmark className="w-4 h-4" /> Saved Reviews
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem onClick={handleSignOut} className="gap-2 cursor-pointer text-destructive">
