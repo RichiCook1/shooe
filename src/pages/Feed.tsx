@@ -1,7 +1,7 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import Navbar from "@/components/landing/Navbar";
 import ReviewCard from "@/components/ReviewCard";
 import ReviewDetailModal from "@/components/ReviewDetailModal";
@@ -11,6 +11,7 @@ import UserSearch from "@/components/UserSearch";
 
 const Feed = () => {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [selectedReview, setSelectedReview] = useState<any>(null);
   const [brand, setBrand] = useState("all");
   const [category, setCategory] = useState("all");
@@ -39,6 +40,36 @@ const Feed = () => {
       return filtered.map((r: any) => ({ ...r, profile: r.user_id ? profileMap[r.user_id] || null : null }));
     },
   });
+
+  // Auto-open review from URL param (e.g., from notification click)
+  useEffect(() => {
+    const reviewId = searchParams.get("reviewId");
+    if (reviewId && reviews && reviews.length > 0) {
+      const found = reviews.find((r: any) => r.id === reviewId);
+      if (found) {
+        setSelectedReview(found);
+        setSearchParams({}, { replace: true });
+      } else {
+        // Review not in current feed, fetch it directly
+        supabase
+          .from("reviews")
+          .select(`*, model:models(id, name, category, brand_id, brand:brands(name))`)
+          .eq("id", reviewId)
+          .single()
+          .then(async ({ data }) => {
+            if (data) {
+              let profile = null;
+              if (data.user_id) {
+                const { data: p } = await supabase.from("profiles").select("user_id, username, display_name, avatar_url").eq("user_id", data.user_id).single();
+                profile = p;
+              }
+              setSelectedReview({ ...data, profile });
+            }
+            setSearchParams({}, { replace: true });
+          });
+      }
+    }
+  }, [searchParams, reviews]);
 
   const handleShare = (review: any) => {
     setShareReview(review);

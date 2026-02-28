@@ -1,0 +1,1 @@
+CREATE POLICY "Authenticated users can insert brands" ON public.brands FOR INSERT TO authenticated WITH CHECK (true);

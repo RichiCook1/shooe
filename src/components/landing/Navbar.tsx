@@ -157,7 +157,7 @@ const Navbar = () => {
                           onClick={() => {
                             if (n.type === "follow") navigate(`/profile/${n.actor_id}`);
                             else if (n.type === "message") navigate("/messages");
-                            else if (n.review_id) navigate("/feed");
+                            else if (n.review_id) navigate(`/feed?reviewId=${n.review_id}`);
                           }}>
                           <span className="text-sm"><span className="font-medium">{actorName}</span> {msg}</span>
                           <span className="text-[10px] text-muted-foreground">{new Date(n.created_at).toLocaleDateString()}</span>
