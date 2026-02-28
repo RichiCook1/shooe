@@ -1,19 +1,24 @@
 import { useParams } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import Navbar from "@/components/landing/Navbar";
 import ReviewCard from "@/components/ReviewCard";
+import ReviewDetailModal from "@/components/ReviewDetailModal";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Link } from "react-router-dom";
-import { Settings, MapPin } from "lucide-react";
+import { Settings, UserPlus, UserMinus } from "lucide-react";
+import { toast } from "sonner";
+import { useState } from "react";
 
 const Profile = () => {
   const { userId } = useParams();
   const { user } = useAuth();
+  const queryClient = useQueryClient();
   const profileUserId = userId || user?.id;
   const isOwnProfile = profileUserId === user?.id;
+  const [selectedReview, setSelectedReview] = useState<any>(null);
 
   const { data: profile, isLoading: profileLoading } = useQuery({
     queryKey: ["profile", profileUserId],
@@ -56,6 +61,43 @@ const Profile = () => {
     enabled: !!profileUserId,
   });
 
+  const { data: isFollowing } = useQuery({
+    queryKey: ["is-following", user?.id, profileUserId],
+    queryFn: async () => {
+      if (!user || !profileUserId || isOwnProfile) return false;
+      const { data } = await supabase
+        .from("follows")
+        .select("id")
+        .eq("follower_id", user.id)
+        .eq("following_id", profileUserId)
+        .maybeSingle();
+      return !!data;
+    },
+    enabled: !!user && !!profileUserId && !isOwnProfile,
+  });
+
+  const followMutation = useMutation({
+    mutationFn: async () => {
+      if (!user || !profileUserId) return;
+      if (isFollowing) {
+        await supabase.from("follows").delete().eq("follower_id", user.id).eq("following_id", profileUserId);
+      } else {
+        await supabase.from("follows").insert({ follower_id: user.id, following_id: profileUserId });
+        // Notification
+        await supabase.from("notifications").insert({
+          user_id: profileUserId,
+          actor_id: user.id,
+          type: "follow",
+        });
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["is-following", user?.id, profileUserId] });
+      queryClient.invalidateQueries({ queryKey: ["follow-counts", profileUserId] });
+    },
+    onError: () => toast.error("Could not update follow status"),
+  });
+
   const displayName = profile?.display_name || profile?.username || "Runner";
 
   if (profileLoading) {
@@ -85,16 +127,26 @@ const Profile = () => {
             )}
           </div>
           <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-3 mb-1">
+            <div className="flex items-center gap-3 mb-1 flex-wrap">
               <h1 className="text-2xl font-bold font-display truncate">{displayName}</h1>
-              {isOwnProfile && (
+              {isOwnProfile ? (
                 <Link to="/edit-profile">
                   <Button variant="outline" size="sm" className="gap-1.5">
                     <Settings className="w-4 h-4" />
                     Edit
                   </Button>
                 </Link>
-              )}
+              ) : user ? (
+                <Button
+                  variant={isFollowing ? "outline" : "default"}
+                  size="sm"
+                  className="gap-1.5"
+                  onClick={() => followMutation.mutate()}
+                  disabled={followMutation.isPending}
+                >
+                  {isFollowing ? <><UserMinus className="w-4 h-4" /> Unfollow</> : <><UserPlus className="w-4 h-4" /> Follow</>}
+                </Button>
+              ) : null}
             </div>
             {profile?.username && <p className="text-sm text-muted-foreground">@{profile.username}</p>}
             {profile?.bio && <p className="text-sm mt-2">{profile.bio}</p>}
@@ -120,12 +172,12 @@ const Profile = () => {
           </div>
         </div>
 
-        {/* Reviews Grid */}
+        {/* Reviews */}
         <h2 className="text-lg font-bold font-display mb-4">Reviews</h2>
         {reviews && reviews.length > 0 ? (
           <div className="space-y-6">
             {reviews.map((review: any) => (
-              <ReviewCard key={review.id} review={{ ...review, profile: profile ? { ...profile } : null }} />
+              <ReviewCard key={review.id} review={{ ...review, profile: profile ? { ...profile } : null }} onClick={() => setSelectedReview({ ...review, profile: profile ? { ...profile } : null })} />
             ))}
           </div>
         ) : (
@@ -133,6 +185,8 @@ const Profile = () => {
             {isOwnProfile ? "You haven't reviewed any shoes yet." : "No reviews yet."}
           </div>
         )}
+
+        <ReviewDetailModal review={selectedReview} open={!!selectedReview} onOpenChange={(open) => !open && setSelectedReview(null)} />
       </main>
     </div>
   );

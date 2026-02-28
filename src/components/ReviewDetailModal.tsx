@@ -2,8 +2,8 @@ import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Heart, MapPin, MessageCircle, Send } from "lucide-react";
-import { useState } from "react";
+import { Heart, MapPin, MessageCircle, Send, ChevronLeft, ChevronRight } from "lucide-react";
+import { useState, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -21,6 +21,7 @@ const ReviewDetailModal = ({ review, open, onOpenChange }: ReviewDetailModalProp
   const queryClient = useQueryClient();
   const [commentText, setCommentText] = useState("");
   const [imageIdx, setImageIdx] = useState(0);
+  const touchStart = useRef<number | null>(null);
 
   const brandModel = [review?.model?.brand?.name, review?.model?.name].filter(Boolean).join(" ");
   const displayName = review?.profile?.display_name || review?.profile?.username || "Anonymous";
@@ -31,10 +32,18 @@ const ReviewDetailModal = ({ review, open, onOpenChange }: ReviewDetailModalProp
     queryFn: async () => {
       const { data } = await supabase
         .from("comments")
-        .select("*, profile:profiles!comments_user_id_fkey(username, display_name, avatar_url)")
+        .select("*")
         .eq("review_id", review.id)
         .order("created_at", { ascending: true });
-      return data ?? [];
+      if (!data) return [];
+      // Fetch profiles for commenters
+      const userIds = [...new Set(data.map((c: any) => c.user_id))];
+      const { data: profiles } = await supabase
+        .from("profiles")
+        .select("user_id, username, display_name, avatar_url")
+        .in("user_id", userIds);
+      const profileMap = Object.fromEntries((profiles ?? []).map((p: any) => [p.user_id, p]));
+      return data.map((c: any) => ({ ...c, profile: profileMap[c.user_id] || null }));
     },
     enabled: !!review?.id && open,
   });
@@ -58,11 +67,18 @@ const ReviewDetailModal = ({ review, open, onOpenChange }: ReviewDetailModalProp
         if (like) await supabase.from("likes").delete().eq("id", like.id);
       } else {
         await supabase.from("likes").insert({ review_id: review.id, user_id: user.id });
+        if (review.user_id && review.user_id !== user.id) {
+          await supabase.from("notifications").insert({
+            user_id: review.user_id,
+            actor_id: user.id,
+            type: "like",
+            review_id: review.id,
+          });
+        }
       }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["likes", review?.id] });
-      queryClient.invalidateQueries({ queryKey: ["feed-reviews"] });
     },
   });
 
@@ -70,12 +86,25 @@ const ReviewDetailModal = ({ review, open, onOpenChange }: ReviewDetailModalProp
     mutationFn: async () => {
       if (!user) { toast.error("Log in to comment"); return; }
       if (!commentText.trim()) return;
-      await supabase.from("comments").insert({ review_id: review.id, user_id: user.id, content: commentText.trim() });
+      const { data: comment } = await supabase
+        .from("comments")
+        .insert({ review_id: review.id, user_id: user.id, content: commentText.trim() })
+        .select()
+        .single();
+      if (comment && review.user_id && review.user_id !== user.id) {
+        await supabase.from("notifications").insert({
+          user_id: review.user_id,
+          actor_id: user.id,
+          type: "comment",
+          review_id: review.id,
+          comment_id: comment.id,
+        });
+      }
       setCommentText("");
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["comments", review?.id] });
-      queryClient.invalidateQueries({ queryKey: ["feed-reviews"] });
+      queryClient.invalidateQueries({ queryKey: ["comment-count", review?.id] });
     },
   });
 
@@ -91,22 +120,49 @@ const ReviewDetailModal = ({ review, open, onOpenChange }: ReviewDetailModalProp
     enabled: !!review?.id && open,
   });
 
+  const handleTouchStart = (e: React.TouchEvent) => { touchStart.current = e.touches[0].clientX; };
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (touchStart.current === null) return;
+    const diff = touchStart.current - e.changedTouches[0].clientX;
+    if (Math.abs(diff) > 50) {
+      if (diff > 0 && imageIdx < images.length - 1) setImageIdx(imageIdx + 1);
+      if (diff < 0 && imageIdx > 0) setImageIdx(imageIdx - 1);
+    }
+    touchStart.current = null;
+  };
+
   if (!review) return null;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto p-0">
-        {/* Image carousel */}
+        {/* Image carousel with swipe */}
         {images.length > 0 && (
-          <div className="relative aspect-[4/3] bg-muted">
+          <div
+            className="relative aspect-[4/3] bg-muted"
+            onTouchStart={handleTouchStart}
+            onTouchEnd={handleTouchEnd}
+          >
             <img src={images[imageIdx]} alt="" className="w-full h-full object-cover" />
             {images.length > 1 && (
-              <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex gap-1.5">
-                {images.map((_: string, i: number) => (
-                  <button key={i} onClick={() => setImageIdx(i)}
-                    className={`w-2 h-2 rounded-full transition-colors ${i === imageIdx ? "bg-primary-foreground" : "bg-primary-foreground/40"}`} />
-                ))}
-              </div>
+              <>
+                {imageIdx > 0 && (
+                  <button onClick={() => setImageIdx(imageIdx - 1)} className="absolute left-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-background/70 flex items-center justify-center">
+                    <ChevronLeft className="w-4 h-4" />
+                  </button>
+                )}
+                {imageIdx < images.length - 1 && (
+                  <button onClick={() => setImageIdx(imageIdx + 1)} className="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-background/70 flex items-center justify-center">
+                    <ChevronRight className="w-4 h-4" />
+                  </button>
+                )}
+                <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex gap-1.5">
+                  {images.map((_: string, i: number) => (
+                    <button key={i} onClick={() => setImageIdx(i)}
+                      className={`w-2 h-2 rounded-full transition-colors ${i === imageIdx ? "bg-primary-foreground" : "bg-primary-foreground/40"}`} />
+                  ))}
+                </div>
+              </>
             )}
           </div>
         )}
@@ -170,10 +226,14 @@ const ReviewDetailModal = ({ review, open, onOpenChange }: ReviewDetailModalProp
           <div className="space-y-3 max-h-48 overflow-y-auto">
             {comments?.map((c: any) => (
               <div key={c.id} className="flex gap-2">
-                <div className="w-6 h-6 rounded-full bg-muted flex items-center justify-center shrink-0 mt-0.5">
-                  <span className="text-[10px] font-bold text-muted-foreground">
-                    {(c.profile?.display_name || c.profile?.username || "A")[0]?.toUpperCase()}
-                  </span>
+                <div className="w-6 h-6 rounded-full bg-muted flex items-center justify-center shrink-0 mt-0.5 overflow-hidden">
+                  {c.profile?.avatar_url ? (
+                    <img src={c.profile.avatar_url} alt="" className="w-full h-full object-cover" />
+                  ) : (
+                    <span className="text-[10px] font-bold text-muted-foreground">
+                      {(c.profile?.display_name || c.profile?.username || "A")[0]?.toUpperCase()}
+                    </span>
+                  )}
                 </div>
                 <div>
                   <span className="text-xs font-medium">{c.profile?.display_name || c.profile?.username || "Anonymous"}</span>
