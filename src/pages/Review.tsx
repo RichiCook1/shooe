@@ -7,7 +7,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, ArrowRight, Camera, Check, MapPin, Mountain, X } from "lucide-react";
+import { Slider } from "@/components/ui/slider";
+import { ArrowLeft, ArrowRight, Camera, Check, MapPin, Mountain, Navigation, X } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 
@@ -21,12 +22,18 @@ const Review = () => {
   const [photoPreviews, setPhotoPreviews] = useState<string[]>([]);
   const [selectedBrand, setSelectedBrand] = useState("");
   const [selectedModel, setSelectedModel] = useState("");
+  const [customBrand, setCustomBrand] = useState("");
+  const [customModel, setCustomModel] = useState("");
+  const [useCustomBrand, setUseCustomBrand] = useState(false);
+  const [useCustomModel, setUseCustomModel] = useState(false);
   const [distance, setDistance] = useState("");
   const [location, setLocation] = useState("");
   const [terrain, setTerrain] = useState("");
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [content, setContent] = useState("");
+  const [rating, setRating] = useState<number>(5);
   const [submitting, setSubmitting] = useState(false);
+  const [geoLoading, setGeoLoading] = useState(false);
 
   const stepIndex = STEPS.indexOf(step);
 
@@ -45,7 +52,7 @@ const Review = () => {
       const { data } = await supabase.from("models").select("*").eq("brand_id", selectedBrand).order("name");
       return data ?? [];
     },
-    enabled: !!selectedBrand,
+    enabled: !!selectedBrand && !useCustomBrand,
   });
 
   const { data: tags } = useQuery({
@@ -82,10 +89,37 @@ const Review = () => {
     setSelectedTags((prev) => prev.includes(id) ? prev.filter((t) => t !== id) : [...prev, id]);
   };
 
+  const handleGeolocate = () => {
+    if (!navigator.geolocation) {
+      toast.error("Geolocation not supported by your browser");
+      return;
+    }
+    setGeoLoading(true);
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        const { latitude, longitude } = pos.coords;
+        try {
+          const res = await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${latitude}&lon=${longitude}&format=json`);
+          const data = await res.json();
+          const city = data.address?.city || data.address?.town || data.address?.village || "";
+          const country = data.address?.country || "";
+          setLocation([city, country].filter(Boolean).join(", ") || `${latitude.toFixed(4)}, ${longitude.toFixed(4)}`);
+        } catch {
+          setLocation(`${latitude.toFixed(4)}, ${longitude.toFixed(4)}`);
+        }
+        setGeoLoading(false);
+      },
+      () => {
+        toast.error("Could not get your location");
+        setGeoLoading(false);
+      }
+    );
+  };
+
   const canProceed = () => {
     switch (step) {
       case "media": return photos.length > 0;
-      case "shoe": return !!selectedModel;
+      case "shoe": return useCustomBrand ? (!!customBrand && !!customModel) : !!selectedModel;
       case "details": return true;
       case "tags": return true;
       default: return false;
@@ -102,7 +136,6 @@ const Review = () => {
   const handleSubmit = async () => {
     setSubmitting(true);
     try {
-      // Upload photos to storage
       const mediaUrls: string[] = [];
       for (const photo of photos) {
         const ext = photo.name.split(".").pop();
@@ -113,10 +146,44 @@ const Review = () => {
         mediaUrls.push(urlData.publicUrl);
       }
 
+      let modelId = selectedModel;
+
+      // If custom brand/model, create them first
+      if (useCustomBrand && customBrand && customModel) {
+        // Try to find or create brand
+        let brandId: string;
+        const { data: existingBrand } = await supabase.from("brands").select("id").ilike("name", customBrand).maybeSingle();
+        if (existingBrand) {
+          brandId = existingBrand.id;
+        } else {
+          const { data: newBrand, error: brandErr } = await supabase.from("brands").insert({ name: customBrand }).select().single();
+          if (brandErr) {
+            // Brand insert may fail due to RLS (admin only), so use a placeholder approach
+            toast.error("Custom brands require admin approval. Please select from the list.");
+            setSubmitting(false);
+            return;
+          }
+          brandId = newBrand.id;
+        }
+
+        const { data: existingModel } = await supabase.from("models").select("id").eq("brand_id", brandId).ilike("name", customModel).maybeSingle();
+        if (existingModel) {
+          modelId = existingModel.id;
+        } else {
+          const { data: newModel, error: modelErr } = await supabase.from("models").insert({ name: customModel, brand_id: brandId }).select().single();
+          if (modelErr) {
+            toast.error("Custom models require admin approval. Please select from the list.");
+            setSubmitting(false);
+            return;
+          }
+          modelId = newModel.id;
+        }
+      }
+
       const guestSessionId = crypto.randomUUID();
 
       const { data: review, error } = await supabase.from("reviews").insert({
-        model_id: selectedModel,
+        model_id: modelId,
         content: content || null,
         distance_km: distance ? parseFloat(distance) : null,
         location: location || null,
@@ -124,11 +191,11 @@ const Review = () => {
         media_urls: mediaUrls,
         is_guest: true,
         guest_session_id: guestSessionId,
+        rating,
       }).select().single();
 
       if (error) throw error;
 
-      // Insert tags
       if (selectedTags.length > 0 && review) {
         const tagInserts = selectedTags.map((tag_id) => ({ review_id: review.id, tag_id }));
         await supabase.from("review_tags").insert(tagInserts);
@@ -190,26 +257,62 @@ const Review = () => {
             </div>
 
             <div className="space-y-4">
-              <div>
-                <label className="text-sm font-medium mb-2 block">Brand</label>
-                <Select value={selectedBrand} onValueChange={(v) => { setSelectedBrand(v); setSelectedModel(""); }}>
-                  <SelectTrigger><SelectValue placeholder="Select brand" /></SelectTrigger>
-                  <SelectContent>
-                    {brands?.map((b) => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
-              {selectedBrand && (
-                <div>
-                  <label className="text-sm font-medium mb-2 block">Model</label>
-                  <Select value={selectedModel} onValueChange={setSelectedModel}>
-                    <SelectTrigger><SelectValue placeholder="Select model" /></SelectTrigger>
-                    <SelectContent>
-                      {models?.map((m) => <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                </div>
+              {!useCustomBrand ? (
+                <>
+                  <div>
+                    <label className="text-sm font-medium mb-2 block">Brand</label>
+                    <Select value={selectedBrand} onValueChange={(v) => { setSelectedBrand(v); setSelectedModel(""); }}>
+                      <SelectTrigger><SelectValue placeholder="Select brand" /></SelectTrigger>
+                      <SelectContent>
+                        {brands?.map((b) => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  {selectedBrand && !useCustomModel ? (
+                    <div>
+                      <label className="text-sm font-medium mb-2 block">Model</label>
+                      <Select value={selectedModel} onValueChange={setSelectedModel}>
+                        <SelectTrigger><SelectValue placeholder="Select model" /></SelectTrigger>
+                        <SelectContent>
+                          {models?.map((m) => <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  ) : selectedBrand && useCustomModel ? (
+                    <div>
+                      <label className="text-sm font-medium mb-2 block">Model Name</label>
+                      <Input placeholder="e.g. Pegasus 41" value={customModel} onChange={(e) => setCustomModel(e.target.value)} />
+                    </div>
+                  ) : null}
+                  {selectedBrand && (
+                    <button
+                      type="button"
+                      onClick={() => setUseCustomModel(!useCustomModel)}
+                      className="text-sm text-primary hover:underline"
+                    >
+                      {useCustomModel ? "← Back to model list" : "Model not listed? Type it manually"}
+                    </button>
+                  )}
+                </>
+              ) : (
+                <>
+                  <div>
+                    <label className="text-sm font-medium mb-2 block">Brand Name</label>
+                    <Input placeholder="e.g. On Running" value={customBrand} onChange={(e) => setCustomBrand(e.target.value)} />
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium mb-2 block">Model Name</label>
+                    <Input placeholder="e.g. Cloudmonster 2" value={customModel} onChange={(e) => setCustomModel(e.target.value)} />
+                  </div>
+                </>
               )}
+              <button
+                type="button"
+                onClick={() => { setUseCustomBrand(!useCustomBrand); setUseCustomModel(false); setCustomBrand(""); setCustomModel(""); setSelectedBrand(""); setSelectedModel(""); }}
+                className="text-sm text-primary hover:underline"
+              >
+                {useCustomBrand ? "← Back to brand list" : "Brand not listed? Type it manually"}
+              </button>
             </div>
           </div>
         )}
@@ -245,7 +348,12 @@ const Review = () => {
                 <label className="text-sm font-medium mb-2 block flex items-center gap-2">
                   <MapPin className="w-4 h-4" /> Location
                 </label>
-                <Input placeholder="e.g. Central Park, NYC" value={location} onChange={(e) => setLocation(e.target.value)} />
+                <div className="flex gap-2">
+                  <Input placeholder="e.g. Central Park, NYC" value={location} onChange={(e) => setLocation(e.target.value)} className="flex-1" />
+                  <Button type="button" variant="outline" size="icon" onClick={handleGeolocate} disabled={geoLoading} title="Use my location">
+                    <Navigation className={`w-4 h-4 ${geoLoading ? "animate-spin" : ""}`} />
+                  </Button>
+                </div>
               </div>
             </div>
           </div>
@@ -255,8 +363,28 @@ const Review = () => {
         {step === "tags" && (
           <div className="animate-fade-in space-y-6">
             <div>
-              <h1 className="text-3xl font-bold font-display mb-2">Tag & Review</h1>
-              <p className="text-muted-foreground mb-6">Select tags and optionally write your thoughts.</p>
+              <h1 className="text-3xl font-bold font-display mb-2">Rate & Review</h1>
+              <p className="text-muted-foreground mb-6">Score the shoe, select tags, and share your thoughts.</p>
+            </div>
+
+            {/* Overall Score */}
+            <div>
+              <label className="text-sm font-medium mb-3 block">Overall Score</label>
+              <div className="flex items-center gap-4">
+                <Slider
+                  value={[rating]}
+                  onValueChange={(v) => setRating(v[0])}
+                  min={0}
+                  max={10}
+                  step={0.5}
+                  className="flex-1"
+                />
+                <span className="text-2xl font-bold font-display min-w-[3ch] text-center text-primary">{rating}</span>
+              </div>
+              <div className="flex justify-between text-xs text-muted-foreground mt-1">
+                <span>0 – Awful</span>
+                <span>10 – Perfect</span>
+              </div>
             </div>
 
             {positiveTags.length > 0 && (

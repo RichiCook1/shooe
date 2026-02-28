@@ -316,6 +316,7 @@ export type Database = {
           location: string | null
           media_urls: string[] | null
           model_id: string
+          rating: number | null
           terrain: Database["public"]["Enums"]["terrain_type"] | null
           updated_at: string
           user_id: string | null
@@ -330,6 +331,7 @@ export type Database = {
           location?: string | null
           media_urls?: string[] | null
           model_id: string
+          rating?: number | null
           terrain?: Database["public"]["Enums"]["terrain_type"] | null
           updated_at?: string
           user_id?: string | null
@@ -344,6 +346,7 @@ export type Database = {
           location?: string | null
           media_urls?: string[] | null
           model_id?: string
+          rating?: number | null
           terrain?: Database["public"]["Enums"]["terrain_type"] | null
           updated_at?: string
           user_id?: string | null
