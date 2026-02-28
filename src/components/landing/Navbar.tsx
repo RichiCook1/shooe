@@ -200,8 +200,9 @@ const Navbar = () => {
 
       {/* Search Modal */}
       <Dialog open={searchOpen} onOpenChange={setSearchOpen}>
-        <DialogContent className="max-w-md">
-          <div className="pt-2">
+        <DialogContent className="max-w-md mx-4">
+          <div className="pt-2 space-y-3">
+            <h3 className="text-lg font-bold font-display">Search runners</h3>
             <UserSearch onSelect={() => setSearchOpen(false)} />
           </div>
         </DialogContent>
