@@ -121,7 +121,7 @@ const Review = () => {
 
   const canProceed = () => {
     switch (step) {
-      case "media": return photos.length > 0;
+      case "media": return true;
       case "shoe": return useCustomBrand ? (!!customBrand && !!customModel) : !!selectedModel;
       case "details": return true;
       case "tags": return true;
@@ -160,7 +160,7 @@ const Review = () => {
         } else {
           const { data: newBrand, error: brandErr } = await supabase.from("brands").insert({ name: customBrand }).select().single();
           if (brandErr) {
-            toast.error("Custom brands require admin approval. Please select from the list.");
+            toast.error("Could not create brand. Please try again.");
             setSubmitting(false);
             return;
           }
@@ -173,7 +173,7 @@ const Review = () => {
         } else {
           const { data: newModel, error: modelErr } = await supabase.from("models").insert({ name: customModel, brand_id: brandId }).select().single();
           if (modelErr) {
-            toast.error("Custom models require admin approval. Please select from the list.");
+            toast.error("Could not create model. Please try again.");
             setSubmitting(false);
             return;
           }
@@ -234,7 +234,7 @@ const Review = () => {
         {step === "media" && (
           <div className="animate-fade-in">
             <h1 className="text-3xl font-bold font-display mb-2">Add Photos</h1>
-            <p className="text-muted-foreground mb-6">Upload at least one photo of your shoes. Up to 5 photos.</p>
+            <p className="text-muted-foreground mb-6">Upload up to 5 photos of your shoes (optional).</p>
             
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-6">
               {photoPreviews.map((src, i) => (

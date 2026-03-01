@@ -17,7 +17,7 @@ const ReviewCard = ({ review, onClick, onShare }: ReviewCardProps) => {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const brandModel = [review.model?.brand?.name, review.model?.name].filter(Boolean).join(" ");
-  const displayName = review.profile?.display_name || review.profile?.username || "Anonymous";
+  const displayName = review.profile?.display_name || review.profile?.username || null;
   const avatar = review.profile?.avatar_url;
   const images = review.media_urls ?? [];
   const [imgIdx, setImgIdx] = useState(0);
@@ -134,20 +134,22 @@ const ReviewCard = ({ review, onClick, onShare }: ReviewCardProps) => {
       <div className="p-4 space-y-3">
         {/* Header */}
         <div className="flex items-center gap-3">
-          <Link
-            to={review.profile?.user_id ? `/profile/${review.profile.user_id}` : "#"}
-            className="flex items-center gap-2 min-w-0"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center overflow-hidden shrink-0">
-              {avatar ? (
-                <img src={avatar} alt="" className="w-full h-full object-cover" />
-              ) : (
-                <span className="text-xs font-bold text-muted-foreground">{displayName[0]?.toUpperCase()}</span>
-              )}
-            </div>
-            <span className="text-sm font-medium truncate">{displayName}</span>
-          </Link>
+          {displayName ? (
+            <Link
+              to={review.profile?.user_id ? `/profile/${review.profile.user_id}` : "#"}
+              className="flex items-center gap-2 min-w-0"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center overflow-hidden shrink-0">
+                {avatar ? (
+                  <img src={avatar} alt="" className="w-full h-full object-cover" />
+                ) : (
+                  <span className="text-xs font-bold text-muted-foreground">{displayName[0]?.toUpperCase()}</span>
+                )}
+              </div>
+              <span className="text-sm font-medium truncate">{displayName}</span>
+            </Link>
+          ) : null}
           <span className="text-xs text-muted-foreground ml-auto shrink-0">
             {new Date(review.created_at).toLocaleDateString()}
           </span>
