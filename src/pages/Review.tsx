@@ -122,7 +122,7 @@ const Review = () => {
   const canProceed = () => {
     switch (step) {
       case "media": return true;
-      case "shoe": return useCustomBrand ? (!!customBrand && !!customModel) : !!selectedModel;
+      case "shoe": return useCustomBrand ? (!!customBrand && !!customModel) : useCustomModel ? (!!selectedBrand && !!customModel) : !!selectedModel;
       case "details": return true;
       case "tags": return true;
       default: return false;
