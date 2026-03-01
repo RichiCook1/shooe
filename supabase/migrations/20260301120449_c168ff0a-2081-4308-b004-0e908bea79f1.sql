@@ -1,0 +1,1 @@
+CREATE POLICY "Authenticated users can insert models" ON public.models FOR INSERT TO authenticated WITH CHECK (true);
