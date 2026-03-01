@@ -1,86 +1,55 @@
 
 
-# Fix Auth, Feed, Review & Social Features
+# Make Sherpa an Installable PWA
 
-## Issues to Fix
+Turn Sherpa into a Progressive Web App so users can add it to their phone's home screen and use it like a native app.
 
-### 1. Auto-Login After Email Verification
-The `AuthContext` already listens to `onAuthStateChange`, but the Login page doesn't redirect when the auth state changes externally (e.g., email verification in another tab). Add a `useEffect` in `Login.tsx` that watches the `user` from `AuthContext` and redirects to `/feed` when authenticated.
+## What You'll Get
+- An "Add to Home Screen" prompt on mobile browsers
+- Full-screen app experience (no browser toolbar)
+- App icon on the home screen with Sherpa branding
+- Faster load times on repeat visits via caching
 
-### 2. Logged-In Review Flow
-Currently, `Review.tsx` always submits as a guest (`is_guest: true`) and shows "Sign Up to Save" at the end. Fix:
-- Check auth state via `useAuth()`
-- If logged in: set `user_id`, `is_guest: false`, skip the signup CTA, show a "View Feed" confirmation instead
-- If guest: keep current flow but store `guest_session_id` in localStorage for later association
+## Steps
 
-### 3. Associate Guest Reviews on Signup
-- Store `guest_session_id` in localStorage during guest review
-- After signup + email confirmation, call an update to associate orphaned guest reviews with the new user via a database function or direct update
-- Create a migration to allow updating `user_id` and `is_guest` on reviews matching a `guest_session_id`
+### 1. Create a Web App Manifest (`public/manifest.json`)
+This file tells the browser how to display the app when installed -- name, colors, icons, and display mode (standalone = no browser chrome).
 
-### 4. User Search Bar
-Add a search input in the Feed page header and Navbar that searches profiles by username/display_name. Show results in a dropdown with links to user profiles.
+### 2. Add PWA Icons
+Generate a set of app icons (192x192 and 512x512) using the existing favicon as a base. These will be placed in `/public/` and referenced in the manifest.
 
-### 5. Feed Filters
-Add filter bar at the top of the Feed page with:
-- Brand filter (dropdown from brands table)
-- Shoe category filter (road/trail/mixed/track)
-- Terrain filter
-- Sort by (recent, highest rated)
-These filter the reviews query dynamically.
+### 3. Create a Service Worker (`public/sw.js`)
+A lightweight service worker that caches the app shell for offline support and faster loading. It will use a cache-first strategy for static assets.
 
-### 6. Location Autocomplete
-Replace the plain text input in the Review details step with an autocomplete that queries the OpenStreetMap Nominatim search API as the user types (debounced), showing dropdown suggestions.
+### 4. Update `index.html`
+- Link to the manifest file
+- Add `<meta name="theme-color">` for the status bar color
+- Add Apple-specific meta tags (`apple-mobile-web-app-capable`, `apple-touch-icon`) for iOS support
+- Register the service worker via an inline script
 
-### 7. Working Likes
-- Add like/unlike toggle in `ReviewCard` using `useAuth()` user ID
-- Insert/delete from `likes` table
-- Show like count and filled heart if liked by current user
-- Seed ~100 likes across existing reviews via migration
+### 5. Add Apple Touch Icon
+iOS Safari doesn't use the manifest icons, so a separate `apple-touch-icon.png` (180x180) is needed.
 
-### 8. Working Comments
-- Add comment section that expands when the comment icon is clicked (inside the review detail modal)
-- Insert/read from `comments` table
-- Seed ~80 demo comments across existing reviews
+## Technical Details
 
-### 9. Review Detail Modal
-When tapping a review card in the feed, open a Dialog/Sheet showing:
-- All photos (carousel)
-- Full review content (not truncated)
-- All tags
-- Rating
-- Comments section with input to add new comment
-- Like button
+**Manifest configuration:**
+- `display: "standalone"` -- removes browser UI
+- `start_url: "/"` -- opens to home page
+- `theme_color` and `background_color` matched to Sherpa's brand colors
 
-### 10. Remove Google Maps from Location Badges
-The location badges in `ReviewCard` currently just show text with a MapPin icon. Ensure they are NOT wrapped in anchor tags or links -- just static badges (this appears to already be the case, but will verify and ensure no external link behavior).
+**Service worker strategy:**
+- Cache app shell (HTML, CSS, JS) on install
+- Serve cached content when offline
+- Update cache when new versions are available
 
----
+**iOS-specific tags:**
+```html
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+```
 
-## Technical Plan
-
-### Database Changes (Migration)
-- Seed ~100 likes across existing reviews with random user assignments
-- Seed ~80 comments with realistic running discussion content
-- Create a function `claim_guest_reviews(p_user_id uuid, p_session_id text)` that updates reviews where `guest_session_id` matches and `is_guest = true`
-
-### Files to Create
-- `src/components/ReviewDetailModal.tsx` -- full review modal with photos, tags, comments, likes
-- `src/components/UserSearch.tsx` -- search bar component with profile results dropdown
-- `src/components/FeedFilters.tsx` -- filter bar for brand, category, terrain, sort
-- `src/components/LocationAutocomplete.tsx` -- debounced location search with Nominatim API suggestions
-
-### Files to Modify
-- `src/pages/Review.tsx` -- auth-aware submission, guest session localStorage, location autocomplete
-- `src/pages/Feed.tsx` -- add search bar, filters, review detail modal
-- `src/pages/Login.tsx` -- watch auth state for auto-redirect, call `claim_guest_reviews` on login
-- `src/components/ReviewCard.tsx` -- working like toggle, click to open detail modal
-- `src/components/landing/Navbar.tsx` -- add user search in navbar
-- `src/contexts/AuthContext.tsx` -- no changes needed (already has onAuthStateChange)
-
-### Auth Flow After Changes
-1. Guest leaves review -> `guest_session_id` saved to localStorage
-2. Guest signs up -> confirms email -> `onAuthStateChange` fires -> redirect to `/feed`
-3. On first authenticated load, check localStorage for `guest_session_id` -> call claim function -> clear localStorage
-4. Logged-in user leaves review -> review saved with `user_id`, lands on feed after submission
+## How Users Install It
+- **iOS Safari**: Tap Share button, then "Add to Home Screen"
+- **Android Chrome**: A banner will auto-appear, or tap menu then "Add to Home Screen"
 
