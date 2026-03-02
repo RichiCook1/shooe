@@ -178,6 +178,23 @@ const Review = () => {
             return;
           }
           modelId = newModel.id;
+      }
+      } else if (useCustomModel && selectedBrand && customModel) {
+        const brandId = selectedBrand;
+        const { data: existingModel } = await supabase
+          .from("models").select("id")
+          .eq("brand_id", brandId).ilike("name", customModel).maybeSingle();
+        if (existingModel) {
+          modelId = existingModel.id;
+        } else {
+          const { data: newModel, error: modelErr } = await supabase
+            .from("models").insert({ name: customModel, brand_id: brandId }).select().single();
+          if (modelErr) {
+            toast.error("Could not create model. Please try again.");
+            setSubmitting(false);
+            return;
+          }
+          modelId = newModel.id;
         }
       }
 
