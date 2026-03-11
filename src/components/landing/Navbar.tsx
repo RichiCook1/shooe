@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Link, useNavigate, useLocation } from "react-router-dom";
-import { PenSquare, LogOut, User, Rss, Search, Bell, MessageCircle, Bookmark } from "lucide-react";
+import { PenSquare, LogOut, User, Rss, Search, Bell, MessageCircle, Bookmark, Mountain } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import UserSearch from "@/components/UserSearch";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
