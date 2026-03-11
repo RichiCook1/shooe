@@ -182,7 +182,7 @@ const Review = () => {
       case "media": return true;
       case "shoe": return useCustomBrand ? (!!customBrand && !!customModel) : useCustomModel ? (!!selectedBrand && !!customModel) : !!selectedModel;
       case "details": return true;
-      case "tags": return true;
+      case "tags": return ratingTouched;
       default: return false;
     }
   };
