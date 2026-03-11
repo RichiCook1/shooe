@@ -106,6 +106,11 @@ const Navbar = () => {
               <Rss className="w-4 h-4" />
             </button>
           </Link>
+          <Link to="/sherpa">
+            <button className={`w-8 h-8 rounded-md flex items-center justify-center transition-colors ${isActive("/sherpa") ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}>
+              <Mountain className="w-4 h-4" />
+            </button>
+          </Link>
           {user && (
             <button
               className={`w-8 h-8 rounded-md flex items-center justify-center transition-colors ${searchOpen ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}
