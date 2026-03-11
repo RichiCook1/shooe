@@ -1,48 +1,44 @@
 
+# Fix: "invalid input syntax for type uuid" on Review Submit
 
-# Browser Push Notifications — What's Missing
+## The Problem
+When you select an existing brand but type a custom model name, the app crashes with `invalid input syntax for type uuid: ""`. This happens because the code only creates a new model when **both** brand and model are custom. If only the model is custom (but the brand was selected from the list), the empty string `""` from `selectedModel` gets sent to the database as the `model_id`, which expects a valid UUID.
 
-The current implementation has two gaps:
+## The Fix
+Update the `handleSubmit` function in `src/pages/Review.tsx` to handle the case where `useCustomModel` is true but `useCustomBrand` is false. In that scenario, we need to:
 
-1. **No push subscription**: The app requests `Notification.permission` but never calls `PushManager.subscribe()` to register the browser with a push service. Without this, the service worker's `push` event listener never fires.
+1. Use `selectedBrand` as the `brandId`
+2. Look up or create the custom model under that brand
+3. Set `modelId` to the result
 
-2. **No server-side push sending**: Notifications are stored in the `notifications` table but never trigger a Web Push message. A server component needs to send pushes via the Web Push protocol when a notification is created.
+### Technical Detail
 
-## Implementation Plan
+Add a new `else if` block after the existing `useCustomBrand` check (around line 155):
 
-### 1. Generate VAPID Keys & Store as Secrets
-- Generate a VAPID key pair (can be done via an edge function or externally)
-- Store `VAPID_PUBLIC_KEY` and `VAPID_PRIVATE_KEY` as secrets
-- Expose the public key to the frontend via an env variable or edge function
+```typescript
+let modelId = selectedModel;
 
-### 2. Create `push_subscriptions` Table
-```sql
-create table public.push_subscriptions (
-  id uuid primary key default gen_random_uuid(),
-  user_id uuid references auth.users(id) on delete cascade not null,
-  endpoint text not null,
-  p256dh text not null,
-  auth text not null,
-  created_at timestamptz default now(),
-  unique (user_id, endpoint)
-);
+if (useCustomBrand && customBrand && customModel) {
+  // ... existing logic for custom brand + custom model (unchanged)
+} else if (useCustomModel && selectedBrand && customModel) {
+  // NEW: handle existing brand + custom model
+  const brandId = selectedBrand;
+  const { data: existingModel } = await supabase
+    .from("models").select("id")
+    .eq("brand_id", brandId).ilike("name", customModel).maybeSingle();
+  if (existingModel) {
+    modelId = existingModel.id;
+  } else {
+    const { data: newModel, error: modelErr } = await supabase
+      .from("models").insert({ name: customModel, brand_id: brandId }).select().single();
+    if (modelErr) {
+      toast.error("Could not create model. Please try again.");
+      setSubmitting(false);
+      return;
+    }
+    modelId = newModel.id;
+  }
+}
 ```
-With RLS: users can insert/delete their own rows.
 
-### 3. Frontend: Subscribe to Push After Permission Granted
-In `AuthContext.tsx`, after `Notification.requestPermission()` succeeds:
-- Get the service worker registration
-- Call `registration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: VAPID_PUBLIC_KEY })`
-- Save the subscription (endpoint, keys.p256dh, keys.auth) to the `push_subscriptions` table
-
-### 4. Edge Function: `send-push-notification`
-- Triggered by a database webhook on `INSERT` into `notifications` table
-- Looks up the target user's push subscriptions
-- Sends a Web Push message using the `web-push` npm package (or raw fetch with VAPID signing)
-- Formats the notification body based on notification type (like, comment, follow, message)
-
-### 5. Database Webhook
-- Create a Supabase database webhook on `notifications` table `INSERT` events that calls the `send-push-notification` edge function
-
-This will complete the push notification pipeline: action → notification row inserted → webhook fires → edge function sends Web Push → service worker shows browser notification.
-
+This is a single-file fix in `src/pages/Review.tsx`.
