@@ -7,8 +7,9 @@ import ReviewCard from "@/components/ReviewCard";
 import ReviewDetailModal from "@/components/ReviewDetailModal";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Link, useNavigate } from "react-router-dom";
-import { Settings, UserPlus, UserMinus, MessageCircle, X } from "lucide-react";
+import { Settings, UserPlus, UserMinus, MessageCircle, X, Edit2 } from "lucide-react";
 import { toast } from "sonner";
 import { useState } from "react";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
@@ -22,6 +23,7 @@ const Profile = () => {
   const isOwnProfile = profileUserId === user?.id;
   const [selectedReview, setSelectedReview] = useState<any>(null);
   const [followListType, setFollowListType] = useState<"followers" | "following" | null>(null);
+  const [shoeModelFeed, setShoeModelFeed] = useState<{ modelId: string; modelName: string; brandName: string } | null>(null);
 
   const { data: profile, isLoading: profileLoading } = useQuery({
     queryKey: ["profile", profileUserId],
@@ -37,11 +39,42 @@ const Profile = () => {
     queryKey: ["user-reviews", profileUserId],
     queryFn: async () => {
       if (!profileUserId) return [];
-      const { data } = await supabase.from("reviews").select(`*, model:models(name, brand:brands(name))`).eq("user_id", profileUserId).order("created_at", { ascending: false });
+      const { data } = await supabase.from("reviews").select(`*, model:models(id, name, category, brand:brands(name))`).eq("user_id", profileUserId).order("created_at", { ascending: false });
       return data ?? [];
     },
     enabled: !!profileUserId,
   });
+
+  // Group reviews by shoe model for Shoes tab
+  const shoeGroups = reviews ? Object.values(
+    reviews.reduce((acc: Record<string, any>, review: any) => {
+      const modelId = review.model?.id;
+      if (!modelId) return acc;
+      if (!acc[modelId]) {
+        acc[modelId] = {
+          modelId,
+          modelName: review.model?.name || "Unknown",
+          brandName: review.model?.brand?.name || "",
+          coverImage: review.media_urls?.[0] || null,
+          reviewCount: 0,
+          latestDate: review.created_at,
+        };
+      }
+      acc[modelId].reviewCount++;
+      if (review.created_at > acc[modelId].latestDate) {
+        acc[modelId].latestDate = review.created_at;
+        if (review.media_urls?.[0]) {
+          acc[modelId].coverImage = review.media_urls[0];
+        }
+      }
+      return acc;
+    }, {})
+  ) : [];
+
+  // Reviews for a specific shoe model
+  const shoeModelReviews = shoeModelFeed
+    ? reviews?.filter((r: any) => r.model?.id === shoeModelFeed.modelId) ?? []
+    : [];
 
   const { data: followCounts } = useQuery({
     queryKey: ["follow-counts", profileUserId],
@@ -66,7 +99,6 @@ const Profile = () => {
     enabled: !!user && !!profileUserId && !isOwnProfile,
   });
 
-  // Followers/following list
   const { data: followList } = useQuery({
     queryKey: ["follow-list", profileUserId, followListType],
     queryFn: async () => {
@@ -184,21 +216,83 @@ const Profile = () => {
           </div>
         </div>
 
-        {/* Reviews */}
-        <h2 className="text-lg font-bold font-display mb-4">Reviews</h2>
-        {reviews && reviews.length > 0 ? (
-          <div className="space-y-6">
-            {reviews.map((review: any) => (
-              <ReviewCard key={review.id} review={{ ...review, profile: profile ? { ...profile } : null }} onClick={() => setSelectedReview({ ...review, profile: profile ? { ...profile } : null })} />
-            ))}
-          </div>
-        ) : (
-          <div className="text-center py-12 text-muted-foreground">
-            {isOwnProfile ? "You haven't reviewed any shoes yet." : "No reviews yet."}
-          </div>
-        )}
+        {/* Tabs */}
+        <Tabs defaultValue="reviews" className="w-full">
+          <TabsList className="w-full grid grid-cols-2 mb-4">
+            <TabsTrigger value="reviews">Reviews</TabsTrigger>
+            <TabsTrigger value="shoes">Shoes</TabsTrigger>
+          </TabsList>
 
-        <ReviewDetailModal review={selectedReview} open={!!selectedReview} onOpenChange={(open) => !open && setSelectedReview(null)} />
+          <TabsContent value="reviews">
+            {reviews && reviews.length > 0 ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {reviews.map((review: any) => (
+                  <ReviewCard
+                    key={review.id}
+                    review={{ ...review, profile: profile ? { ...profile } : null }}
+                    onClick={() => setSelectedReview({ ...review, profile: profile ? { ...profile } : null })}
+                  />
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-12 text-muted-foreground">
+                {isOwnProfile ? "You haven't reviewed any shoes yet." : "No reviews yet."}
+              </div>
+            )}
+          </TabsContent>
+
+          <TabsContent value="shoes">
+            {shoeGroups.length > 0 ? (
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                {(shoeGroups as any[]).map((shoe) => (
+                  <button
+                    key={shoe.modelId}
+                    onClick={() => setShoeModelFeed({ modelId: shoe.modelId, modelName: shoe.modelName, brandName: shoe.brandName })}
+                    className="bg-card rounded-xl border border-border overflow-hidden hover:shadow-[var(--shadow-elevated)] transition-shadow text-left"
+                  >
+                    <div className="aspect-square bg-muted overflow-hidden">
+                      {shoe.coverImage ? (
+                        <img src={shoe.coverImage} alt={shoe.modelName} className="w-full h-full object-cover" loading="lazy" />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center text-muted-foreground text-sm">No photo</div>
+                      )}
+                    </div>
+                    <div className="p-3">
+                      <p className="font-display font-bold text-sm truncate">{shoe.brandName} {shoe.modelName}</p>
+                      <p className="text-xs text-muted-foreground">{shoe.reviewCount} review{shoe.reviewCount !== 1 ? "s" : ""}</p>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-12 text-muted-foreground">No shoes reviewed yet.</div>
+            )}
+          </TabsContent>
+        </Tabs>
+
+        <ReviewDetailModal
+          review={selectedReview}
+          open={!!selectedReview}
+          onOpenChange={(open) => !open && setSelectedReview(null)}
+        />
+
+        {/* Shoe model feed modal */}
+        <Dialog open={!!shoeModelFeed} onOpenChange={(open) => !open && setShoeModelFeed(null)}>
+          <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
+            <h3 className="text-xl font-bold font-display mb-4">
+              {shoeModelFeed?.brandName} {shoeModelFeed?.modelName}
+            </h3>
+            <div className="space-y-4">
+              {shoeModelReviews.map((review: any) => (
+                <ReviewCard
+                  key={review.id}
+                  review={{ ...review, profile: profile ? { ...profile } : null }}
+                  onClick={() => { setShoeModelFeed(null); setSelectedReview({ ...review, profile: profile ? { ...profile } : null }); }}
+                />
+              ))}
+            </div>
+          </DialogContent>
+        </Dialog>
 
         {/* Follow list modal */}
         <Dialog open={!!followListType} onOpenChange={(open) => !open && setFollowListType(null)}>

@@ -100,21 +100,21 @@ const Navbar = () => {
           <span className="text-lg font-display tracking-wider uppercase">Sherpa</span>
         </Link>
 
-        {user && (
-          <nav className="flex items-center gap-0.5 mx-auto">
-            <Link to="/feed">
-              <button className={`w-8 h-8 rounded-md flex items-center justify-center transition-colors ${isActive("/feed") ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}>
-                <Rss className="w-4 h-4" />
-              </button>
-            </Link>
+        <nav className="flex items-center gap-0.5 mx-auto">
+          <Link to="/feed">
+            <button className={`w-8 h-8 rounded-md flex items-center justify-center transition-colors ${isActive("/feed") ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}>
+              <Rss className="w-4 h-4" />
+            </button>
+          </Link>
+          {user && (
             <button
               className={`w-8 h-8 rounded-md flex items-center justify-center transition-colors ${searchOpen ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}
               onClick={() => setSearchOpen(true)}
             >
               <Search className="w-4 h-4" />
             </button>
-          </nav>
-        )}
+          )}
+        </nav>
 
         <div className="flex items-center gap-1 shrink-0">
           <Link to="/review">

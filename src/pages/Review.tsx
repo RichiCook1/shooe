@@ -11,18 +11,36 @@ import { Badge } from "@/components/ui/badge";
 import { Slider } from "@/components/ui/slider";
 import LocationAutocomplete from "@/components/LocationAutocomplete";
 import { ArrowLeft, ArrowRight, Camera, Check, MapPin, Mountain, Navigation, X } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
+import { compressImage } from "@/lib/imageCompression";
+
+const CATEGORIES = [
+  { value: "road", label: "Road" },
+  { value: "trail", label: "Trail" },
+  { value: "track", label: "Track" },
+  { value: "racing", label: "Racing" },
+  { value: "indoor_climbing", label: "Indoor Climbing" },
+  { value: "outdoor_climbing", label: "Outdoor Climbing" },
+  { value: "mountaineering", label: "Mountaineering" },
+  { value: "hiking", label: "Hiking" },
+  { value: "recovery", label: "Recovery" },
+  { value: "cross_training", label: "Cross Training" },
+  { value: "walking", label: "Walking" },
+];
 
 type Step = "media" | "shoe" | "details" | "tags" | "done";
 const STEPS: Step[] = ["media", "shoe", "details", "tags", "done"];
 
 const Review = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const editReviewId = searchParams.get("edit");
   const { user } = useAuth();
   const [step, setStep] = useState<Step>("media");
   const [photos, setPhotos] = useState<File[]>([]);
   const [photoPreviews, setPhotoPreviews] = useState<string[]>([]);
+  const [existingMediaUrls, setExistingMediaUrls] = useState<string[]>([]);
   const [selectedBrand, setSelectedBrand] = useState("");
   const [selectedModel, setSelectedModel] = useState("");
   const [customBrand, setCustomBrand] = useState("");
@@ -32,11 +50,40 @@ const Review = () => {
   const [distance, setDistance] = useState("");
   const [location, setLocation] = useState("");
   const [terrain, setTerrain] = useState("");
+  const [shoeCategory, setShoeCategory] = useState("");
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [content, setContent] = useState("");
   const [rating, setRating] = useState<number>(5);
   const [submitting, setSubmitting] = useState(false);
   const [geoLoading, setGeoLoading] = useState(false);
+
+  // Load existing review for editing
+  useQuery({
+    queryKey: ["edit-review", editReviewId],
+    queryFn: async () => {
+      if (!editReviewId) return null;
+      const { data } = await supabase.from("reviews").select(`*, model:models(id, name, category, brand_id, brand:brands(id, name))`).eq("id", editReviewId).single();
+      if (data) {
+        setContent(data.content || "");
+        setRating(data.rating ?? 5);
+        setDistance(data.distance_km?.toString() || "");
+        setLocation(data.location || "");
+        setTerrain(data.terrain || "");
+        setExistingMediaUrls(data.media_urls || []);
+        setPhotoPreviews(data.media_urls || []);
+        if (data.model) {
+          setSelectedBrand(data.model.brand_id);
+          setSelectedModel(data.model.id);
+          setShoeCategory(data.model.category || "");
+        }
+        // Load tags
+        const { data: reviewTags } = await supabase.from("review_tags").select("tag_id").eq("review_id", editReviewId);
+        if (reviewTags) setSelectedTags(reviewTags.map((rt: any) => rt.tag_id));
+      }
+      return data;
+    },
+    enabled: !!editReviewId,
+  });
 
   const stepIndex = STEPS.indexOf(step);
 
@@ -69,23 +116,32 @@ const Review = () => {
   const positiveTags = tags?.filter((t) => t.type === "positive") ?? [];
   const negativeTags = tags?.filter((t) => t.type === "negative") ?? [];
 
-  const handlePhotoAdd = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+  const handlePhotoAdd = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
-    if (files.length + photos.length > 5) {
+    if (files.length + photos.length + existingMediaUrls.length > 5) {
       toast.error("Maximum 5 photos allowed");
       return;
     }
-    setPhotos((prev) => [...prev, ...files]);
-    files.forEach((f) => {
+    // Compress images before adding
+    const compressed = await Promise.all(files.map((f) => compressImage(f)));
+    setPhotos((prev) => [...prev, ...compressed]);
+    compressed.forEach((f) => {
       const reader = new FileReader();
       reader.onload = (ev) => setPhotoPreviews((prev) => [...prev, ev.target?.result as string]);
       reader.readAsDataURL(f);
     });
-  }, [photos.length]);
+  }, [photos.length, existingMediaUrls.length]);
 
   const removePhoto = (idx: number) => {
-    setPhotos((prev) => prev.filter((_, i) => i !== idx));
-    setPhotoPreviews((prev) => prev.filter((_, i) => i !== idx));
+    if (idx < existingMediaUrls.length) {
+      // Removing an existing URL
+      setExistingMediaUrls((prev) => prev.filter((_, i) => i !== idx));
+      setPhotoPreviews((prev) => prev.filter((_, i) => i !== idx));
+    } else {
+      const photoIdx = idx - existingMediaUrls.length;
+      setPhotos((prev) => prev.filter((_, i) => i !== photoIdx));
+      setPhotoPreviews((prev) => prev.filter((_, i) => i !== idx));
+    }
   };
 
   const toggleTag = (id: string) => {
@@ -139,7 +195,8 @@ const Review = () => {
   const handleSubmit = async () => {
     setSubmitting(true);
     try {
-      const mediaUrls: string[] = [];
+      // Upload new photos (already compressed)
+      const newMediaUrls: string[] = [];
       const folder = user ? `user/${user.id}` : "guest";
       for (const photo of photos) {
         const ext = photo.name.split(".").pop();
@@ -147,8 +204,10 @@ const Review = () => {
         const { error: uploadError } = await supabase.storage.from("review-media").upload(path, photo);
         if (uploadError) throw uploadError;
         const { data: urlData } = supabase.storage.from("review-media").getPublicUrl(path);
-        mediaUrls.push(urlData.publicUrl);
+        newMediaUrls.push(urlData.publicUrl);
       }
+
+      const allMediaUrls = [...existingMediaUrls, ...newMediaUrls];
 
       let modelId = selectedModel;
 
@@ -171,14 +230,14 @@ const Review = () => {
         if (existingModel) {
           modelId = existingModel.id;
         } else {
-          const { data: newModel, error: modelErr } = await supabase.from("models").insert({ name: customModel, brand_id: brandId }).select().single();
+          const { data: newModel, error: modelErr } = await supabase.from("models").insert({ name: customModel, brand_id: brandId, category: (shoeCategory as any) || null }).select().single();
           if (modelErr) {
             toast.error("Could not create model. Please try again.");
             setSubmitting(false);
             return;
           }
           modelId = newModel.id;
-      }
+        }
       } else if (useCustomModel && selectedBrand && customModel) {
         const brandId = selectedBrand;
         const { data: existingModel } = await supabase
@@ -188,7 +247,7 @@ const Review = () => {
           modelId = existingModel.id;
         } else {
           const { data: newModel, error: modelErr } = await supabase
-            .from("models").insert({ name: customModel, brand_id: brandId }).select().single();
+            .from("models").insert({ name: customModel, brand_id: brandId, category: (shoeCategory as any) || null }).select().single();
           if (modelErr) {
             toast.error("Could not create model. Please try again.");
             setSubmitting(false);
@@ -198,35 +257,64 @@ const Review = () => {
         }
       }
 
-      const isLoggedIn = !!user;
-      const guestSessionId = isLoggedIn ? null : crypto.randomUUID();
-
-      // Store guest session for later claim
-      if (!isLoggedIn && guestSessionId) {
-        localStorage.setItem("guest_session_id", guestSessionId);
+      // Update category on existing model if selected
+      if (!useCustomBrand && !useCustomModel && shoeCategory && modelId) {
+        await supabase.from("models").update({ category: shoeCategory as any }).eq("id", modelId);
       }
 
-      const { data: review, error } = await supabase.from("reviews").insert({
-        model_id: modelId,
-        content: content || null,
-        distance_km: distance ? parseFloat(distance) : null,
-        location: location || null,
-        terrain: (terrain as "road" | "trail" | "mixed" | "track") || null,
-        media_urls: mediaUrls,
-        is_guest: !isLoggedIn,
-        guest_session_id: guestSessionId,
-        user_id: isLoggedIn ? user.id : null,
-        rating,
-      }).select().single();
+      if (editReviewId) {
+        // Update existing review
+        const { error } = await supabase.from("reviews").update({
+          model_id: modelId,
+          content: content || null,
+          distance_km: distance ? parseFloat(distance) : null,
+          location: location || null,
+          terrain: (terrain as any) || null,
+          media_urls: allMediaUrls,
+          rating,
+        }).eq("id", editReviewId);
 
-      if (error) throw error;
+        if (error) throw error;
 
-      if (selectedTags.length > 0 && review) {
-        const tagInserts = selectedTags.map((tag_id) => ({ review_id: review.id, tag_id }));
-        await supabase.from("review_tags").insert(tagInserts);
+        // Update tags: delete old, insert new
+        await supabase.from("review_tags").delete().eq("review_id", editReviewId);
+        if (selectedTags.length > 0) {
+          const tagInserts = selectedTags.map((tag_id) => ({ review_id: editReviewId, tag_id }));
+          await supabase.from("review_tags").insert(tagInserts);
+        }
+
+        setStep("done");
+      } else {
+        // Create new review
+        const isLoggedIn = !!user;
+        const guestSessionId = isLoggedIn ? null : crypto.randomUUID();
+
+        if (!isLoggedIn && guestSessionId) {
+          localStorage.setItem("guest_session_id", guestSessionId);
+        }
+
+        const { data: review, error } = await supabase.from("reviews").insert({
+          model_id: modelId,
+          content: content || null,
+          distance_km: distance ? parseFloat(distance) : null,
+          location: location || null,
+          terrain: (terrain as any) || null,
+          media_urls: allMediaUrls,
+          is_guest: !isLoggedIn,
+          guest_session_id: guestSessionId,
+          user_id: isLoggedIn ? user.id : null,
+          rating,
+        }).select().single();
+
+        if (error) throw error;
+
+        if (selectedTags.length > 0 && review) {
+          const tagInserts = selectedTags.map((tag_id) => ({ review_id: review.id, tag_id }));
+          await supabase.from("review_tags").insert(tagInserts);
+        }
+
+        setStep("done");
       }
-
-      setStep("done");
     } catch (err: any) {
       toast.error("Failed to submit review: " + err.message);
     } finally {
@@ -251,18 +339,18 @@ const Review = () => {
         {step === "media" && (
           <div className="animate-fade-in">
             <h1 className="text-3xl font-bold font-display mb-2">Add Photos</h1>
-            <p className="text-muted-foreground mb-6">Upload up to 5 photos of your shoes (optional).</p>
+            <p className="text-muted-foreground mb-6">Upload up to 5 photos of your shoes (optional). Images are automatically compressed.</p>
             
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-6">
               {photoPreviews.map((src, i) => (
-                <div key={i} className="relative aspect-square rounded-lg overflow-hidden border border-border group">
-                  <img src={src} alt="" className="w-full h-full object-cover" />
+                <div key={i} className="relative rounded-lg overflow-hidden border border-border group">
+                  <img src={src} alt="" className="w-full object-contain bg-muted max-h-48" />
                   <button onClick={() => removePhoto(i)} className="absolute top-2 right-2 p-1 rounded-full bg-background/80 opacity-0 group-hover:opacity-100 transition-opacity">
                     <X className="w-4 h-4" />
                   </button>
                 </div>
               ))}
-              {photos.length < 5 && (
+              {photos.length + existingMediaUrls.length < 5 && (
                 <label className="aspect-square rounded-lg border-2 border-dashed border-border hover:border-primary/50 flex flex-col items-center justify-center cursor-pointer transition-colors">
                   <Camera className="w-8 h-8 text-muted-foreground mb-2" />
                   <span className="text-sm text-muted-foreground">Add Photo</span>
@@ -334,6 +422,17 @@ const Review = () => {
               >
                 {useCustomBrand ? "← Back to brand list" : "Brand not listed? Type it manually"}
               </button>
+
+              {/* Category selection */}
+              <div>
+                <label className="text-sm font-medium mb-2 block">Category</label>
+                <Select value={shoeCategory} onValueChange={setShoeCategory}>
+                  <SelectTrigger><SelectValue placeholder="Select category" /></SelectTrigger>
+                  <SelectContent>
+                    {CATEGORIES.map((c) => <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
           </div>
         )}
@@ -449,7 +548,9 @@ const Review = () => {
             <div className="w-16 h-16 rounded-full bg-success/10 flex items-center justify-center mx-auto mb-6">
               <Check className="w-8 h-8 text-success" />
             </div>
-            <h1 className="text-3xl font-bold font-display mb-3">Review Submitted!</h1>
+            <h1 className="text-3xl font-bold font-display mb-3">
+              {editReviewId ? "Review Updated!" : "Review Submitted!"}
+            </h1>
             {user ? (
               <>
                 <p className="text-muted-foreground mb-8 max-w-md mx-auto">
@@ -465,7 +566,7 @@ const Review = () => {
                   Thanks for sharing your experience. Sign up to save this review to your profile and follow other runners.
                 </p>
                 <div className="flex flex-col sm:flex-row gap-3 justify-center">
-                  <Button onClick={() => navigate("/login")} className="bg-gradient-hero text-primary-foreground hover:opacity-90">
+                  <Button onClick={() => navigate("/login?mode=signup")} className="bg-gradient-hero text-primary-foreground hover:opacity-90">
                     Sign Up to Save
                   </Button>
                   <Button variant="outline" onClick={() => navigate("/")}>
@@ -485,7 +586,7 @@ const Review = () => {
             </Button>
             {step === "tags" ? (
               <Button onClick={handleSubmit} disabled={submitting} className="bg-gradient-hero text-primary-foreground hover:opacity-90">
-                {submitting ? "Submitting..." : "Submit Review"}
+                {submitting ? "Submitting..." : editReviewId ? "Update Review" : "Submit Review"}
               </Button>
             ) : (
               <Button onClick={next} disabled={!canProceed()}>

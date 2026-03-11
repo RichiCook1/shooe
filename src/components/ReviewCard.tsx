@@ -6,6 +6,21 @@ import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { formatLocationCityCountry } from "@/lib/imageCompression";
+
+const CATEGORY_LABELS: Record<string, string> = {
+  road: "Road",
+  trail: "Trail",
+  track: "Track",
+  racing: "Racing",
+  indoor_climbing: "Indoor Climbing",
+  outdoor_climbing: "Outdoor Climbing",
+  mountaineering: "Mountaineering",
+  hiking: "Hiking",
+  recovery: "Recovery",
+  cross_training: "Cross Training",
+  walking: "Walking",
+};
 
 interface ReviewCardProps {
   review: any;
@@ -22,6 +37,7 @@ const ReviewCard = ({ review, onClick, onShare }: ReviewCardProps) => {
   const images = review.media_urls ?? [];
   const [imgIdx, setImgIdx] = useState(0);
   const touchStart = useRef<number | null>(null);
+  const categoryLabel = review.model?.category ? CATEGORY_LABELS[review.model.category] || review.model.category : null;
 
   const { data: likes } = useQuery({
     queryKey: ["likes", review.id],
@@ -98,11 +114,18 @@ const ReviewCard = ({ review, onClick, onShare }: ReviewCardProps) => {
     touchStart.current = null;
   };
 
+  const locationDisplay = formatLocationCityCountry(review.location);
+
   return (
     <div className="bg-card rounded-xl border border-border overflow-hidden shadow-[var(--shadow-card)] hover:shadow-[var(--shadow-elevated)] transition-shadow cursor-pointer" onClick={onClick}>
       {images.length > 0 && (
-        <div className="relative aspect-[4/3] overflow-hidden" onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd}>
-          <img src={images[imgIdx]} alt={brandModel} className="w-full h-full object-cover" />
+        <div className="relative overflow-hidden" onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd}>
+          <img
+            src={images[imgIdx]}
+            alt={brandModel}
+            className="w-full object-contain bg-muted max-h-[400px]"
+            loading="lazy"
+          />
           {images.length > 1 && (
             <>
               {imgIdx > 0 && (
@@ -142,7 +165,7 @@ const ReviewCard = ({ review, onClick, onShare }: ReviewCardProps) => {
             >
               <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center overflow-hidden shrink-0">
                 {avatar ? (
-                  <img src={avatar} alt="" className="w-full h-full object-cover" />
+                  <img src={avatar} alt="" className="w-full h-full object-cover" loading="lazy" />
                 ) : (
                   <span className="text-xs font-bold text-muted-foreground">{displayName[0]?.toUpperCase()}</span>
                 )}
@@ -168,12 +191,13 @@ const ReviewCard = ({ review, onClick, onShare }: ReviewCardProps) => {
 
         {/* Meta */}
         <div className="flex flex-wrap gap-2">
+          {categoryLabel && <Badge variant="outline" className="text-xs">{categoryLabel}</Badge>}
           {review.terrain && <Badge variant="secondary" className="capitalize">{review.terrain}</Badge>}
           {review.distance_km && <Badge variant="secondary">{review.distance_km} km</Badge>}
-          {review.location && (
+          {locationDisplay && (
             <Badge variant="secondary" className="gap-1">
               <MapPin className="w-3 h-3" />
-              {review.location}
+              {locationDisplay}
             </Badge>
           )}
         </div>

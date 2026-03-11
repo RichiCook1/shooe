@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -9,15 +10,31 @@ import { Filter, X } from "lucide-react";
 interface FeedFiltersProps {
   brand: string;
   category: string;
-  terrain: string;
   sort: string;
+  country: string;
+  city: string;
   onBrandChange: (v: string) => void;
   onCategoryChange: (v: string) => void;
-  onTerrainChange: (v: string) => void;
   onSortChange: (v: string) => void;
+  onCountryChange: (v: string) => void;
+  onCityChange: (v: string) => void;
 }
 
-const FeedFilters = ({ brand, category, terrain, sort, onBrandChange, onCategoryChange, onTerrainChange, onSortChange }: FeedFiltersProps) => {
+const CATEGORIES = [
+  { value: "road", label: "Road" },
+  { value: "trail", label: "Trail" },
+  { value: "track", label: "Track" },
+  { value: "racing", label: "Racing" },
+  { value: "indoor_climbing", label: "Indoor Climbing" },
+  { value: "outdoor_climbing", label: "Outdoor Climbing" },
+  { value: "mountaineering", label: "Mountaineering" },
+  { value: "hiking", label: "Hiking" },
+  { value: "recovery", label: "Recovery" },
+  { value: "cross_training", label: "Cross Training" },
+  { value: "walking", label: "Walking" },
+];
+
+const FeedFilters = ({ brand, category, sort, country, city, onBrandChange, onCategoryChange, onSortChange, onCountryChange, onCityChange }: FeedFiltersProps) => {
   const [expanded, setExpanded] = useState(false);
 
   const { data: brands } = useQuery({
@@ -28,13 +45,14 @@ const FeedFilters = ({ brand, category, terrain, sort, onBrandChange, onCategory
     },
   });
 
-  const activeCount = [brand, category, terrain].filter((v) => v !== "all").length + (sort !== "recent" ? 1 : 0);
+  const activeCount = [brand, category, country, city].filter((v) => v !== "all" && v !== "").length + (sort !== "recent" ? 1 : 0);
 
   const clearAll = () => {
     onBrandChange("all");
     onCategoryChange("all");
-    onTerrainChange("all");
     onSortChange("recent");
+    onCountryChange("all");
+    onCityChange("");
   };
 
   return (
@@ -64,6 +82,12 @@ const FeedFilters = ({ brand, category, terrain, sort, onBrandChange, onCategory
             Recent
           </button>
           <button
+            onClick={() => onSortChange("popular")}
+            className={`px-2.5 py-1 rounded-full text-xs font-medium transition-colors ${sort === "popular" ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground hover:bg-accent"}`}
+          >
+            Popular
+          </button>
+          <button
             onClick={() => onSortChange("rating")}
             className={`px-2.5 py-1 rounded-full text-xs font-medium transition-colors ${sort === "rating" ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground hover:bg-accent"}`}
           >
@@ -83,26 +107,26 @@ const FeedFilters = ({ brand, category, terrain, sort, onBrandChange, onCategory
           </Select>
 
           <Select value={category} onValueChange={onCategoryChange}>
-            <SelectTrigger className="w-[120px] h-8 text-xs"><SelectValue placeholder="Category" /></SelectTrigger>
+            <SelectTrigger className="w-[140px] h-8 text-xs"><SelectValue placeholder="Category" /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All Categories</SelectItem>
-              <SelectItem value="road">Road</SelectItem>
-              <SelectItem value="trail">Trail</SelectItem>
-              <SelectItem value="track">Track</SelectItem>
-              <SelectItem value="racing">Racing</SelectItem>
+              {CATEGORIES.map((c) => <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>)}
             </SelectContent>
           </Select>
 
-          <Select value={terrain} onValueChange={onTerrainChange}>
-            <SelectTrigger className="w-[110px] h-8 text-xs"><SelectValue placeholder="Terrain" /></SelectTrigger>
+          <Select value={country} onValueChange={onCountryChange}>
+            <SelectTrigger className="w-[120px] h-8 text-xs"><SelectValue placeholder="Country" /></SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All Terrain</SelectItem>
-              <SelectItem value="road">Road</SelectItem>
-              <SelectItem value="trail">Trail</SelectItem>
-              <SelectItem value="mixed">Mixed</SelectItem>
-              <SelectItem value="track">Track</SelectItem>
+              <SelectItem value="all">All Countries</SelectItem>
             </SelectContent>
           </Select>
+
+          <Input
+            placeholder="City"
+            value={city}
+            onChange={(e) => onCityChange(e.target.value)}
+            className="w-[100px] h-8 text-xs"
+          />
 
           {activeCount > 0 && (
             <Button variant="ghost" size="sm" className="h-8 text-xs gap-1 text-muted-foreground" onClick={clearAll}>

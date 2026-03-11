@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useNavigate, useSearchParams } from "react-router-dom";
+import { useAuth } from "@/contexts/AuthContext";
 import Navbar from "@/components/landing/Navbar";
 import ReviewCard from "@/components/ReviewCard";
 import ReviewDetailModal from "@/components/ReviewDetailModal";
@@ -11,26 +12,30 @@ import UserSearch from "@/components/UserSearch";
 
 const Feed = () => {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
   const [selectedReview, setSelectedReview] = useState<any>(null);
   const [brand, setBrand] = useState("all");
   const [category, setCategory] = useState("all");
-  const [terrain, setTerrain] = useState("all");
   const [sort, setSort] = useState("recent");
+  const [country, setCountry] = useState("all");
+  const [city, setCity] = useState("");
   const [shareReview, setShareReview] = useState<any>(null);
 
   const { data: reviews, isLoading } = useQuery({
-    queryKey: ["feed-reviews", brand, category, terrain, sort],
+    queryKey: ["feed-reviews", brand, category, sort, country, city],
     queryFn: async () => {
       let query = supabase.from("reviews").select(`*, model:models(id, name, category, brand_id, brand:brands(name))`);
-      if (terrain !== "all") query = query.eq("terrain", terrain as any);
       if (sort === "recent") query = query.order("created_at", { ascending: false });
       else if (sort === "rating") query = query.order("rating", { ascending: false });
+      else if (sort === "popular") query = query.order("created_at", { ascending: false }); // will sort by likes client-side
       const { data, error } = await query.limit(50);
       if (error) return [];
       let filtered = data ?? [];
       if (brand !== "all") filtered = filtered.filter((r: any) => r.model?.brand_id === brand);
       if (category !== "all") filtered = filtered.filter((r: any) => r.model?.category === category);
+      if (city) filtered = filtered.filter((r: any) => r.location?.toLowerCase().includes(city.toLowerCase()));
+      if (country !== "all") filtered = filtered.filter((r: any) => r.location?.toLowerCase().includes(country.toLowerCase()));
       const userIds = [...new Set(filtered.map((r: any) => r.user_id).filter(Boolean))];
       let profileMap: Record<string, any> = {};
       if (userIds.length > 0) {
@@ -41,7 +46,7 @@ const Feed = () => {
     },
   });
 
-  // Auto-open review from URL param (e.g., from notification click)
+  // Auto-open review from URL param
   useEffect(() => {
     const reviewId = searchParams.get("reviewId");
     if (reviewId && reviews && reviews.length > 0) {
@@ -50,7 +55,6 @@ const Feed = () => {
         setSelectedReview(found);
         setSearchParams({}, { replace: true });
       } else {
-        // Review not in current feed, fetch it directly
         supabase
           .from("reviews")
           .select(`*, model:models(id, name, category, brand_id, brand:brands(name))`)
@@ -72,20 +76,28 @@ const Feed = () => {
   }, [searchParams, reviews]);
 
   const handleShare = (review: any) => {
+    if (!user) {
+      navigate("/login");
+      return;
+    }
     setShareReview(review);
   };
 
   return (
     <div className="min-h-screen bg-background">
       <Navbar />
-      <main className="container mx-auto px-4 py-6 max-w-2xl">
-        <FeedFilters brand={brand} category={category} terrain={terrain} sort={sort} onBrandChange={setBrand} onCategoryChange={setCategory} onTerrainChange={setTerrain} onSortChange={setSort} />
+      <main className="container mx-auto px-4 py-6 max-w-6xl">
+        <FeedFilters
+          brand={brand} category={category} sort={sort} country={country} city={city}
+          onBrandChange={setBrand} onCategoryChange={setCategory} onSortChange={setSort}
+          onCountryChange={setCountry} onCityChange={setCity}
+        />
         {isLoading ? (
-          <div className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             {[1, 2, 3].map((i) => <div key={i} className="bg-card rounded-xl border border-border h-64 animate-pulse" />)}
           </div>
         ) : reviews && reviews.length > 0 ? (
-          <div className="space-y-6">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             {reviews.map((review: any) => (
               <ReviewCard key={review.id} review={review} onClick={() => setSelectedReview(review)} onShare={handleShare} />
             ))}
@@ -93,7 +105,7 @@ const Feed = () => {
         ) : (
           <div className="text-center py-16">
             <p className="text-muted-foreground text-lg mb-2">No reviews yet</p>
-            <p className="text-sm text-muted-foreground">Be the first to share your running shoe experience!</p>
+            <p className="text-sm text-muted-foreground">Be the first to share your shoe experience!</p>
           </div>
         )}
         <ReviewDetailModal review={selectedReview} open={!!selectedReview} onOpenChange={(open) => !open && setSelectedReview(null)} onShare={handleShare} />
