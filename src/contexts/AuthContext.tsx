@@ -18,6 +18,16 @@ const AuthContext = createContext<AuthContextType>({
 
 export const useAuth = () => useContext(AuthContext);
 
+// Request notification permission for PWA
+function requestNotificationPermission() {
+  if ("Notification" in window && "serviceWorker" in navigator && Notification.permission === "default") {
+    // Delay the request slightly to not block initial UX
+    setTimeout(() => {
+      Notification.requestPermission();
+    }, 5000);
+  }
+}
+
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
@@ -28,6 +38,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       setSession(session);
       setUser(session?.user ?? null);
       setLoading(false);
+
+      // Request notification permission once user is logged in
+      if (session?.user) {
+        requestNotificationPermission();
+      }
     });
 
     supabase.auth.getSession().then(({ data: { session } }) => {
