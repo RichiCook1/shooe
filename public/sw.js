@@ -1,4 +1,4 @@
-const CACHE_NAME = 'sherpa-v1';
+const CACHE_NAME = 'sherpa-v2';
 const STATIC_ASSETS = [
   '/',
   '/manifest.json',
@@ -25,8 +25,8 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   const { request } = event;
 
-  // Skip non-GET and API/supabase requests
-  if (request.method !== 'GET' || request.url.includes('/rest/') || request.url.includes('/auth/')) {
+  // Skip non-GET and API/supabase/oauth requests
+  if (request.method !== 'GET' || request.url.includes('/rest/') || request.url.includes('/auth/') || request.url.includes('/~oauth')) {
     return;
   }
 
@@ -43,6 +43,38 @@ self.addEventListener('fetch', (event) => {
         .catch(() => cached);
 
       return cached || fetchPromise;
+    })
+  );
+});
+
+// Push notification support
+self.addEventListener('push', (event) => {
+  let data = { title: 'Sherpa', body: 'You have a new notification' };
+  try {
+    if (event.data) data = event.data.json();
+  } catch (e) {
+    if (event.data) data.body = event.data.text();
+  }
+
+  event.waitUntil(
+    self.registration.showNotification(data.title || 'Sherpa', {
+      body: data.body || 'You have a new notification',
+      icon: '/icon-192.png',
+      badge: '/icon-192.png',
+      data: data.url || '/',
+    })
+  );
+});
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const url = event.notification.data || '/';
+  event.waitUntil(
+    clients.matchAll({ type: 'window' }).then((windowClients) => {
+      for (const client of windowClients) {
+        if (client.url.includes(url) && 'focus' in client) return client.focus();
+      }
+      return clients.openWindow(url);
     })
   );
 });

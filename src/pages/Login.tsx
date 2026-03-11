@@ -1,7 +1,7 @@
 import Navbar from "@/components/landing/Navbar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -16,8 +16,8 @@ const Login = () => {
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
   const { user } = useAuth();
+  const justSignedUp = useRef(false);
 
-  // Auto-redirect when auth state changes
   useEffect(() => {
     if (user) {
       const guestSessionId = localStorage.getItem("guest_session_id");
@@ -25,7 +25,13 @@ const Login = () => {
         supabase.rpc("claim_guest_reviews", { p_user_id: user.id, p_session_id: guestSessionId })
           .then(() => localStorage.removeItem("guest_session_id"));
       }
-      navigate("/feed", { replace: true });
+      // If just signed up, redirect to profile onboarding
+      if (justSignedUp.current) {
+        justSignedUp.current = false;
+        navigate("/edit-profile?onboarding=true", { replace: true });
+      } else {
+        navigate("/feed", { replace: true });
+      }
     }
   }, [user, navigate]);
 
@@ -42,6 +48,7 @@ const Login = () => {
         if (error) throw error;
         toast.success("Check your email to confirm your account!");
       } else {
+        justSignedUp.current = false;
         const { error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) throw error;
         toast.success("Welcome back!");

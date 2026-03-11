@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -14,6 +14,8 @@ import { toast } from "sonner";
 const EditProfile = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const isOnboarding = searchParams.get("onboarding") === "true";
   const [saving, setSaving] = useState(false);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
 
@@ -103,12 +105,16 @@ const EditProfile = () => {
       }
 
       toast.success("Profile saved!");
-      navigate("/profile");
+      navigate(isOnboarding ? "/feed" : "/profile");
     } catch (err: any) {
       toast.error(err.message);
     } finally {
       setSaving(false);
     }
+  };
+
+  const handleSkip = () => {
+    navigate("/feed");
   };
 
   if (isLoading) {
@@ -126,7 +132,16 @@ const EditProfile = () => {
     <div className="min-h-screen bg-background">
       <Navbar />
       <main className="container mx-auto px-4 py-8 max-w-lg">
-        <h1 className="text-3xl font-bold font-display mb-6">Edit Profile</h1>
+        <div className="mb-6">
+          <h1 className="text-3xl font-bold font-display">
+            {isOnboarding ? "Complete Your Profile" : "Edit Profile"}
+          </h1>
+          {isOnboarding && (
+            <p className="text-sm text-muted-foreground mt-1">
+              Tell us about yourself so other runners can find you.
+            </p>
+          )}
+        </div>
 
         <div className="space-y-4">
           {/* Avatar upload */}
@@ -209,10 +224,16 @@ const EditProfile = () => {
           </div>
 
           <div className="flex gap-3 pt-4">
-            <Button onClick={handleSave} disabled={saving} className="bg-gradient-hero text-primary-foreground hover:opacity-90 flex-1">
-              {saving ? "Saving..." : "Save Profile"}
+            <Button onClick={handleSave} disabled={saving} className="flex-1">
+              {saving ? "Saving..." : isOnboarding ? "Confirm" : "Save Profile"}
             </Button>
-            <Button variant="outline" onClick={() => navigate("/profile")}>Cancel</Button>
+            {isOnboarding ? (
+              <Button variant="outline" onClick={handleSkip} className="flex-1">
+                Skip
+              </Button>
+            ) : (
+              <Button variant="outline" onClick={() => navigate("/profile")}>Cancel</Button>
+            )}
           </div>
         </div>
       </main>
