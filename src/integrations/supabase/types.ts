@@ -579,6 +579,11 @@ export type Database = {
         | "cross_training"
         | "walking"
         | "racing"
+        | "indoor_climbing"
+        | "outdoor_climbing"
+        | "mountaineering"
+        | "hiking"
+        | "recovery"
       tag_type: "positive" | "negative"
       terrain_type: "road" | "trail" | "mixed" | "track"
       weekly_volume: "lt_10km" | "10_30km" | "gt_30km"
@@ -718,6 +723,11 @@ export const Constants = {
         "cross_training",
         "walking",
         "racing",
+        "indoor_climbing",
+        "outdoor_climbing",
+        "mountaineering",
+        "hiking",
+        "recovery",
       ],
       tag_type: ["positive", "negative"],
       terrain_type: ["road", "trail", "mixed", "track"],

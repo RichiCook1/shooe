@@ -2,13 +2,14 @@ import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Heart, MapPin, MessageCircle, Send, ChevronLeft, ChevronRight, Bookmark, Share2 } from "lucide-react";
+import { Heart, MapPin, MessageCircle, Send, ChevronLeft, ChevronRight, Bookmark, Share2, Edit2 } from "lucide-react";
 import { useState, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
+import { formatLocationCityCountry } from "@/lib/imageCompression";
 
 interface ReviewDetailModalProps {
   review: any;
@@ -19,6 +20,7 @@ interface ReviewDetailModalProps {
 
 const ReviewDetailModal = ({ review, open, onOpenChange, onShare }: ReviewDetailModalProps) => {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [commentText, setCommentText] = useState("");
   const [imageIdx, setImageIdx] = useState(0);
@@ -27,6 +29,7 @@ const ReviewDetailModal = ({ review, open, onOpenChange, onShare }: ReviewDetail
   const brandModel = [review?.model?.brand?.name, review?.model?.name].filter(Boolean).join(" ");
   const displayName = review?.profile?.display_name || review?.profile?.username || "Anonymous";
   const images = review?.media_urls ?? [];
+  const isOwner = user && review?.user_id === user.id;
 
   const { data: comments } = useQuery({
     queryKey: ["comments", review?.id],
@@ -140,14 +143,16 @@ const ReviewDetailModal = ({ review, open, onOpenChange, onShare }: ReviewDetail
     touchStart.current = null;
   };
 
+  const locationDisplay = formatLocationCityCountry(review?.location);
+
   if (!review) return null;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto p-0">
         {images.length > 0 && (
-          <div className="relative aspect-[4/3] bg-muted" onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd}>
-            <img src={images[imageIdx]} alt="" className="w-full h-full object-cover" />
+          <div className="relative bg-muted" onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd}>
+            <img src={images[imageIdx]} alt="" className="w-full object-contain max-h-[400px]" loading="lazy" />
             {images.length > 1 && (
               <>
                 {imageIdx > 0 && (
@@ -182,7 +187,14 @@ const ReviewDetailModal = ({ review, open, onOpenChange, onShare }: ReviewDetail
               </div>
               <span className="text-sm font-medium">{displayName}</span>
             </Link>
-            <span className="text-xs text-muted-foreground">{new Date(review.created_at).toLocaleDateString()}</span>
+            <div className="flex items-center gap-2">
+              {isOwner && (
+                <Button variant="ghost" size="sm" className="gap-1 text-xs" onClick={() => { onOpenChange(false); navigate(`/review?edit=${review.id}`); }}>
+                  <Edit2 className="w-3.5 h-3.5" /> Edit
+                </Button>
+              )}
+              <span className="text-xs text-muted-foreground">{new Date(review.created_at).toLocaleDateString()}</span>
+            </div>
           </div>
 
           <div className="flex items-center justify-between">
@@ -198,7 +210,7 @@ const ReviewDetailModal = ({ review, open, onOpenChange, onShare }: ReviewDetail
           <div className="flex flex-wrap gap-2">
             {review.terrain && <Badge variant="secondary" className="capitalize">{review.terrain}</Badge>}
             {review.distance_km && <Badge variant="secondary">{review.distance_km} km</Badge>}
-            {review.location && <Badge variant="secondary" className="gap-1"><MapPin className="w-3 h-3" />{review.location}</Badge>}
+            {locationDisplay && <Badge variant="secondary" className="gap-1"><MapPin className="w-3 h-3" />{locationDisplay}</Badge>}
           </div>
 
           {tags && tags.length > 0 && (

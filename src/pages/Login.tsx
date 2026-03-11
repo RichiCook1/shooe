@@ -2,13 +2,14 @@ import Navbar from "@/components/landing/Navbar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 
 const Login = () => {
-  const [isSignUp, setIsSignUp] = useState(false);
+  const [searchParams] = useSearchParams();
+  const [isSignUp, setIsSignUp] = useState(searchParams.get("mode") === "signup");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [username, setUsername] = useState("");
@@ -16,10 +17,9 @@ const Login = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
 
-  // Auto-redirect when auth state changes (e.g. email verification)
+  // Auto-redirect when auth state changes
   useEffect(() => {
     if (user) {
-      // Claim guest reviews if any
       const guestSessionId = localStorage.getItem("guest_session_id");
       if (guestSessionId) {
         supabase.rpc("claim_guest_reviews", { p_user_id: user.id, p_session_id: guestSessionId })
@@ -45,7 +45,6 @@ const Login = () => {
         const { error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) throw error;
         toast.success("Welcome back!");
-        // Redirect handled by useEffect above
       }
     } catch (err: any) {
       toast.error(err.message);
