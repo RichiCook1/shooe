@@ -175,7 +175,8 @@ const Sherpa = () => {
       {selectedReview && (
         <ReviewDetailModal
           review={selectedReview}
-          onClose={() => setSelectedReview(null)}
+          open={!!selectedReview}
+          onOpenChange={(open) => { if (!open) setSelectedReview(null); }}
         />
       )}
     </div>
