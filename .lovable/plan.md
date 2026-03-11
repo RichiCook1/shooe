@@ -1,44 +1,65 @@
 
-# Fix: "invalid input syntax for type uuid" on Review Submit
 
-## The Problem
-When you select an existing brand but type a custom model name, the app crashes with `invalid input syntax for type uuid: ""`. This happens because the code only creates a new model when **both** brand and model are custom. If only the model is custom (but the brand was selected from the list), the empty string `""` from `selectedModel` gets sent to the database as the `model_id`, which expects a valid UUID.
+# "Ask the Shoe Sherpa" -- AI-Powered Shoe Search Chatbot
 
-## The Fix
-Update the `handleSubmit` function in `src/pages/Review.tsx` to handle the case where `useCustomModel` is true but `useCustomBrand` is false. In that scenario, we need to:
+## Overview
+A chatbot feature where users type natural language questions about shoes and get AI-generated answers grounded in the app's review data, followed by a feed of matching reviews.
 
-1. Use `selectedBrand` as the `brandId`
-2. Look up or create the custom model under that brand
-3. Set `modelId` to the result
+## Architecture
 
-### Technical Detail
-
-Add a new `else if` block after the existing `useCustomBrand` check (around line 155):
-
-```typescript
-let modelId = selectedModel;
-
-if (useCustomBrand && customBrand && customModel) {
-  // ... existing logic for custom brand + custom model (unchanged)
-} else if (useCustomModel && selectedBrand && customModel) {
-  // NEW: handle existing brand + custom model
-  const brandId = selectedBrand;
-  const { data: existingModel } = await supabase
-    .from("models").select("id")
-    .eq("brand_id", brandId).ilike("name", customModel).maybeSingle();
-  if (existingModel) {
-    modelId = existingModel.id;
-  } else {
-    const { data: newModel, error: modelErr } = await supabase
-      .from("models").insert({ name: customModel, brand_id: brandId }).select().single();
-    if (modelErr) {
-      toast.error("Could not create model. Please try again.");
-      setSubmitting(false);
-      return;
-    }
-    modelId = newModel.id;
-  }
-}
+```text
+User Question
+     │
+     ▼
+ Frontend Chat UI ──POST──▶ Edge Function: shoe-sherpa
+                                  │
+                                  ├─ 1. Query Supabase for ALL reviews
+                                  │    (with model, brand, rating, content, location, category)
+                                  │
+                                  ├─ 2. Build prompt with review data as context
+                                  │
+                                  ├─ 3. Call Lovable AI (gemini-3-flash-preview)
+                                  │    with tool_call to return structured output:
+                                  │    { answer: string, relevant_review_ids: string[] }
+                                  │
+                                  └─ 4. Return answer + review IDs to frontend
+                                         │
+                                         ▼
+                              Frontend renders:
+                              - AI text answer
+                              - Matching reviews as feed cards
 ```
 
-This is a single-file fix in `src/pages/Review.tsx`.
+## Implementation Plan
+
+### 1. Edge Function: `supabase/functions/shoe-sherpa/index.ts`
+- Accepts `{ question: string }` in POST body
+- Fetches reviews from DB (with model name, brand name, rating, content, category, location) using the service role key
+- Constructs a system prompt instructing the AI to act as "The Shoe Sherpa" -- a knowledgeable guide who recommends shoes based on real user reviews
+- Uses Lovable AI with **tool calling** to extract structured output: a brief text answer + an array of relevant review IDs
+- Returns `{ answer: string, reviewIds: string[] }`
+
+### 2. New Page: `src/pages/Sherpa.tsx`
+- Chat-style UI with a prominent input at the bottom
+- On submit, calls the edge function
+- Displays the AI answer as a message bubble
+- Below the answer, renders matching reviews using the existing `ReviewCard` component in the standard feed grid layout
+- Supports clicking into `ReviewDetailModal`
+
+### 3. Navigation
+- Add route `/sherpa` in `App.tsx`
+- Add a "Shoe Sherpa" link/button in the Navbar (accessible to all users, including guests)
+- Optionally add a prominent CTA on the landing page
+
+### 4. Config
+- Add `[functions.shoe-sherpa]` with `verify_jwt = false` to `supabase/config.toml` (public access for guests)
+- Uses existing `LOVABLE_API_KEY` secret (already configured)
+
+## Technical Details
+
+**Edge function prompt strategy**: The function will fetch up to 200 recent reviews with their model/brand/category/rating/content. These get serialized into a compact format in the system prompt. The AI is instructed to identify which review IDs are relevant and provide a concise recommendation.
+
+**Structured output via tool calling**: Instead of asking the model to return JSON directly, the edge function will use a `recommend_shoes` tool definition that returns `{ answer: string, relevant_review_ids: string[] }`.
+
+**Frontend query flow**: After receiving review IDs from the edge function, the frontend fetches the full review objects (with profiles) from Supabase to render proper ReviewCards.
+
