@@ -176,6 +176,7 @@ const FeaturedReviews = () => {
                           </span>
                         )}
                       </div>
+                      </div>
                     </article>
                   );
                 })}
