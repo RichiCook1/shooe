@@ -526,6 +526,21 @@ const Review = () => {
             )}
 
             <div>
+              <label className="text-sm font-medium mb-3 block">Overall Score <span className="text-destructive">*</span></label>
+              <div className="flex items-center gap-4">
+                <Slider value={[rating ?? 5]} onValueChange={(v) => { setRating(v[0]); setRatingTouched(true); }} min={0} max={10} step={0.5} className="flex-1" />
+                <span className={`text-2xl font-bold font-display min-w-[3ch] text-center ${ratingTouched ? 'text-primary' : 'text-muted-foreground'}`}>{ratingTouched ? rating : '–'}</span>
+              </div>
+              <div className="flex justify-between text-xs text-muted-foreground mt-1">
+                <span>0 – Awful</span>
+                <span>10 – Perfect</span>
+              </div>
+              {!ratingTouched && (
+                <p className="text-xs text-muted-foreground mt-2">Drag the slider to set your score</p>
+              )}
+            </div>
+
+            <div>
               <label className="text-sm font-medium mb-2 block">Your Review (optional)</label>
               <Textarea placeholder="How did these shoes feel on your run? Any standout moments?" value={content} onChange={(e) => setContent(e.target.value)} rows={5} />
             </div>
