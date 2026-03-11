@@ -53,7 +53,8 @@ const Review = () => {
   const [shoeCategory, setShoeCategory] = useState("");
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [content, setContent] = useState("");
-  const [rating, setRating] = useState<number>(5);
+    const [rating, setRating] = useState<number | null>(null);
+    const [ratingTouched, setRatingTouched] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [geoLoading, setGeoLoading] = useState(false);
 
@@ -66,6 +67,7 @@ const Review = () => {
       if (data) {
         setContent(data.content || "");
         setRating(data.rating ?? 5);
+        setRatingTouched(true);
         setDistance(data.distance_km?.toString() || "");
         setLocation(data.location || "");
         setTerrain(data.terrain || "");
@@ -180,7 +182,7 @@ const Review = () => {
       case "media": return true;
       case "shoe": return useCustomBrand ? (!!customBrand && !!customModel) : useCustomModel ? (!!selectedBrand && !!customModel) : !!selectedModel;
       case "details": return true;
-      case "tags": return true;
+      case "tags": return ratingTouched;
       default: return false;
     }
   };
@@ -487,18 +489,6 @@ const Review = () => {
               <p className="text-muted-foreground mb-6">Score the shoe, select tags, and share your thoughts.</p>
             </div>
 
-            <div>
-              <label className="text-sm font-medium mb-3 block">Overall Score</label>
-              <div className="flex items-center gap-4">
-                <Slider value={[rating]} onValueChange={(v) => setRating(v[0])} min={0} max={10} step={0.5} className="flex-1" />
-                <span className="text-2xl font-bold font-display min-w-[3ch] text-center text-primary">{rating}</span>
-              </div>
-              <div className="flex justify-between text-xs text-muted-foreground mt-1">
-                <span>0 – Awful</span>
-                <span>10 – Perfect</span>
-              </div>
-            </div>
-
             {positiveTags.length > 0 && (
               <div>
                 <label className="text-sm font-medium mb-3 block text-success">👍 What you loved</label>
@@ -534,6 +524,21 @@ const Review = () => {
                 </div>
               </div>
             )}
+
+            <div>
+              <label className="text-sm font-medium mb-3 block">Overall Score <span className="text-destructive">*</span></label>
+              <div className="flex items-center gap-4">
+                <Slider value={[rating ?? 5]} onValueChange={(v) => { setRating(v[0]); setRatingTouched(true); }} min={0} max={10} step={0.5} className="flex-1" />
+                <span className={`text-2xl font-bold font-display min-w-[3ch] text-center ${ratingTouched ? 'text-primary' : 'text-muted-foreground'}`}>{ratingTouched ? rating : '–'}</span>
+              </div>
+              <div className="flex justify-between text-xs text-muted-foreground mt-1">
+                <span>0 – Awful</span>
+                <span>10 – Perfect</span>
+              </div>
+              {!ratingTouched && (
+                <p className="text-xs text-muted-foreground mt-2">Drag the slider to set your score</p>
+              )}
+            </div>
 
             <div>
               <label className="text-sm font-medium mb-2 block">Your Review (optional)</label>

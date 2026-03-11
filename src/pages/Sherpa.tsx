@@ -87,7 +87,7 @@ const Sherpa = () => {
         <div className="text-center mb-8">
           <div className="inline-flex items-center gap-2 mb-3">
             <Mountain className="w-8 h-8 text-primary" />
-            <h1 className="text-3xl md:text-4xl font-display uppercase tracking-wider">Shoe Sherpa</h1>
+            <h1 className="text-3xl md:text-4xl font-display uppercase tracking-wider">Ask the Shoe Sherpa</h1>
           </div>
           <p className="text-muted-foreground text-sm max-w-md mx-auto">
             Ask anything about shoes — I'll search through real user reviews to find your answer.
