@@ -117,13 +117,13 @@ const ReviewCard = ({ review, onClick, onShare }: ReviewCardProps) => {
   const locationDisplay = formatLocationCityCountry(review.location);
 
   return (
-    <div className="bg-card rounded-xl border border-border overflow-hidden shadow-[var(--shadow-card)] hover:shadow-[var(--shadow-elevated)] transition-shadow cursor-pointer" onClick={onClick}>
+    <div className="bg-card rounded-xl overflow-hidden shadow-[var(--shadow-card)] hover:shadow-[var(--shadow-elevated)] transition-shadow cursor-pointer" onClick={onClick}>
       {images.length > 0 && (
         <div className="relative overflow-hidden" onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd}>
           <img
             src={images[imgIdx]}
             alt={brandModel}
-            className="w-full object-contain bg-muted max-h-[400px]"
+            className="w-full object-contain max-h-[400px]"
             loading="lazy"
           />
           {images.length > 1 && (
