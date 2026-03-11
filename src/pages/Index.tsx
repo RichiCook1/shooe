@@ -24,8 +24,8 @@ const Index = () => {
       <Navbar />
       <main>
         <HeroSection />
-        <StatsSection />
         <FeaturedReviews />
+        <StatsSection />
       </main>
       <Footer />
     </div>
