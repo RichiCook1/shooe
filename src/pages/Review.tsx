@@ -53,7 +53,8 @@ const Review = () => {
   const [shoeCategory, setShoeCategory] = useState("");
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [content, setContent] = useState("");
-  const [rating, setRating] = useState<number>(5);
+    const [rating, setRating] = useState<number | null>(null);
+    const [ratingTouched, setRatingTouched] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [geoLoading, setGeoLoading] = useState(false);
 
