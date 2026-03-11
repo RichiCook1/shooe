@@ -112,12 +112,23 @@ const FeaturedReviews = () => {
                   const tags = getTagsForReview(review.id);
                   const locationDisplay = formatLocationCityCountry(review.location);
 
-                  return (
+                    const images = review.media_urls ?? [];
+
+                    return (
                     <article
                       key={review.id}
-                      className="group border border-border p-5 hover:bg-muted/50 transition-colors animate-slide-up"
+                      className="group border border-border overflow-hidden hover:bg-muted/50 transition-colors animate-slide-up"
                       style={{ animationDelay: `${index * 0.06}s` }}
                     >
+                      {images.length > 0 && (
+                        <img
+                          src={images[0]}
+                          alt={model?.name}
+                          className="w-full h-40 object-cover"
+                          loading="lazy"
+                        />
+                      )}
+                      <div className="p-5">
                       <div className="flex items-start justify-between mb-3">
                         <div>
                           <p className="text-[10px] uppercase tracking-[0.15em] text-muted-foreground">
@@ -164,6 +175,7 @@ const FeaturedReviews = () => {
                             {locationDisplay}
                           </span>
                         )}
+                      </div>
                       </div>
                     </article>
                   );
