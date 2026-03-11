@@ -67,6 +67,7 @@ const Review = () => {
       if (data) {
         setContent(data.content || "");
         setRating(data.rating ?? 5);
+        setRatingTouched(true);
         setDistance(data.distance_km?.toString() || "");
         setLocation(data.location || "");
         setTerrain(data.terrain || "");
