@@ -12,6 +12,7 @@ import Profile from "./pages/Profile";
 import EditProfile from "./pages/EditProfile";
 import Messages from "./pages/Messages";
 import SavedReviews from "./pages/SavedReviews";
+import Sherpa from "./pages/Sherpa";
 import ProtectedRoute from "./components/ProtectedRoute";
 import NotFound from "./pages/NotFound";
 
@@ -34,6 +35,7 @@ const App = () => (
             <Route path="/edit-profile" element={<ProtectedRoute><EditProfile /></ProtectedRoute>} />
             <Route path="/messages" element={<ProtectedRoute><Messages /></ProtectedRoute>} />
             <Route path="/saved" element={<ProtectedRoute><SavedReviews /></ProtectedRoute>} />
+            <Route path="/sherpa" element={<Sherpa />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </AuthProvider>

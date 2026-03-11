@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Link, useNavigate, useLocation } from "react-router-dom";
-import { PenSquare, LogOut, User, Rss, Search, Bell, MessageCircle, Bookmark } from "lucide-react";
+import { PenSquare, LogOut, User, Rss, Search, Bell, MessageCircle, Bookmark, Mountain } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import UserSearch from "@/components/UserSearch";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -104,6 +104,11 @@ const Navbar = () => {
           <Link to="/feed">
             <button className={`w-8 h-8 rounded-md flex items-center justify-center transition-colors ${isActive("/feed") ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}>
               <Rss className="w-4 h-4" />
+            </button>
+          </Link>
+          <Link to="/sherpa">
+            <button className={`w-8 h-8 rounded-md flex items-center justify-center transition-colors ${isActive("/sherpa") ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}>
+              <Mountain className="w-4 h-4" />
             </button>
           </Link>
           {user && (
