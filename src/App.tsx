@@ -12,6 +12,7 @@ import Profile from "./pages/Profile";
 import EditProfile from "./pages/EditProfile";
 import Messages from "./pages/Messages";
 import SavedReviews from "./pages/SavedReviews";
+import Sherpa from "./pages/Sherpa";
 import ProtectedRoute from "./components/ProtectedRoute";
 import NotFound from "./pages/NotFound";
 
