@@ -1,8 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { MapPin } from "lucide-react";
+import { MapPin, ArrowRight, Mountain } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { ArrowRight } from "lucide-react";
 import { Link } from "react-router-dom";
 import { formatLocationCityCountry } from "@/lib/imageCompression";
 import StatsSection from "./StatsSection";
@@ -66,16 +65,17 @@ const FeaturedReviews = () => {
                 Real reviews from real runners. No fluff, no sponsored content — just honest miles logged.
               </p>
 
-              <div className="flex items-center gap-4 animate-fade-in" style={{ animationDelay: "0.3s" }}>
-                <Link to="/review">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 animate-fade-in" style={{ animationDelay: "0.3s" }}>
+                <Link to="/sherpa">
                   <Button size="lg" className="h-12 px-8 text-sm uppercase tracking-wider font-medium">
-                    Write a Review
-                    <ArrowRight className="w-4 h-4 ml-2" />
+                    <Mountain className="w-4 h-4 mr-2" />
+                    Ask the Shoe Sherpa
                   </Button>
                 </Link>
-                <Link to="/login">
+                <Link to="/review">
                   <Button variant="outline" size="lg" className="h-12 px-8 text-sm uppercase tracking-wider font-medium">
-                    Sign In
+                    Write a Review
+                    <ArrowRight className="w-4 h-4 ml-2" />
                   </Button>
                 </Link>
               </div>
