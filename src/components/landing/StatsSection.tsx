@@ -1,7 +1,11 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 
-const StatsSection = () => {
+interface StatsSectionProps {
+  inline?: boolean;
+}
+
+const StatsSection = ({ inline }: StatsSectionProps) => {
   const { data: stats } = useQuery({
     queryKey: ["landing-stats"],
     queryFn: async () => {
@@ -23,6 +27,19 @@ const StatsSection = () => {
     { label: "Models", value: stats?.models ?? 0 },
     { label: "Brands", value: stats?.brands ?? 0 },
   ];
+
+  if (inline) {
+    return (
+      <div className="grid grid-cols-3 gap-8">
+        {statItems.map((item, i) => (
+          <div key={i} className="animate-fade-in" style={{ animationDelay: `${i * 0.1}s` }}>
+            <p className="text-3xl md:text-4xl font-display">{item.value}+</p>
+            <p className="text-[10px] uppercase tracking-[0.15em] text-muted-foreground mt-1">{item.label}</p>
+          </div>
+        ))}
+      </div>
+    );
+  }
 
   return (
     <section className="py-20">
