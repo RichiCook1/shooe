@@ -489,18 +489,6 @@ const Review = () => {
               <p className="text-muted-foreground mb-6">Score the shoe, select tags, and share your thoughts.</p>
             </div>
 
-            <div>
-              <label className="text-sm font-medium mb-3 block">Overall Score</label>
-              <div className="flex items-center gap-4">
-                <Slider value={[rating]} onValueChange={(v) => setRating(v[0])} min={0} max={10} step={0.5} className="flex-1" />
-                <span className="text-2xl font-bold font-display min-w-[3ch] text-center text-primary">{rating}</span>
-              </div>
-              <div className="flex justify-between text-xs text-muted-foreground mt-1">
-                <span>0 – Awful</span>
-                <span>10 – Perfect</span>
-              </div>
-            </div>
-
             {positiveTags.length > 0 && (
               <div>
                 <label className="text-sm font-medium mb-3 block text-success">👍 What you loved</label>
