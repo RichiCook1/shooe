@@ -41,6 +41,42 @@ export type Database = {
         }
         Relationships: []
       }
+      catalog_jobs: {
+        Row: {
+          errors: Json | null
+          finished_at: string | null
+          id: string
+          job_name: string
+          models_added: number
+          models_updated: number
+          notes: string | null
+          started_at: string
+          status: string
+        }
+        Insert: {
+          errors?: Json | null
+          finished_at?: string | null
+          id?: string
+          job_name: string
+          models_added?: number
+          models_updated?: number
+          notes?: string | null
+          started_at?: string
+          status?: string
+        }
+        Update: {
+          errors?: Json | null
+          finished_at?: string | null
+          id?: string
+          job_name?: string
+          models_added?: number
+          models_updated?: number
+          notes?: string | null
+          started_at?: string
+          status?: string
+        }
+        Relationships: []
+      }
       comments: {
         Row: {
           content: string
@@ -225,6 +261,72 @@ export type Database = {
           },
         ]
       }
+      model_review_queue: {
+        Row: {
+          created_at: string
+          id: string
+          model_id: string | null
+          resolved_at: string | null
+          resolved_by: string | null
+          status: string
+          submitted_brand: string
+          submitted_model: string
+          web_check_result: Json | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          model_id?: string | null
+          resolved_at?: string | null
+          resolved_by?: string | null
+          status?: string
+          submitted_brand: string
+          submitted_model: string
+          web_check_result?: Json | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          model_id?: string | null
+          resolved_at?: string | null
+          resolved_by?: string | null
+          status?: string
+          submitted_brand?: string
+          submitted_model?: string
+          web_check_result?: Json | null
+        }
+        Relationships: []
+      }
+      model_summaries: {
+        Row: {
+          avg_rating: number | null
+          id: string
+          model_id: string
+          review_count: number
+          summary: string | null
+          top_tags: Json | null
+          updated_at: string
+        }
+        Insert: {
+          avg_rating?: number | null
+          id?: string
+          model_id: string
+          review_count?: number
+          summary?: string | null
+          top_tags?: Json | null
+          updated_at?: string
+        }
+        Update: {
+          avg_rating?: number | null
+          id?: string
+          model_id?: string
+          review_count?: number
+          summary?: string | null
+          top_tags?: Json | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       models: {
         Row: {
           brand_id: string
@@ -235,8 +337,11 @@ export type Database = {
           image_url: string | null
           msrp: number | null
           name: string
+          pending_review: boolean
           release_year: number | null
+          source: string | null
           stack_height_mm: number | null
+          verified: boolean
           weight_g: number | null
         }
         Insert: {
@@ -248,8 +353,11 @@ export type Database = {
           image_url?: string | null
           msrp?: number | null
           name: string
+          pending_review?: boolean
           release_year?: number | null
+          source?: string | null
           stack_height_mm?: number | null
+          verified?: boolean
           weight_g?: number | null
         }
         Update: {
@@ -261,8 +369,11 @@ export type Database = {
           image_url?: string | null
           msrp?: number | null
           name?: string
+          pending_review?: boolean
           release_year?: number | null
+          source?: string | null
           stack_height_mm?: number | null
+          verified?: boolean
           weight_g?: number | null
         }
         Relationships: [
@@ -595,6 +706,8 @@ export type Database = {
         }
         Returns: boolean
       }
+      show_limit: { Args: never; Returns: number }
+      show_trgm: { Args: { "": string }; Returns: string[] }
     }
     Enums: {
       app_role: "admin" | "moderator" | "user"
