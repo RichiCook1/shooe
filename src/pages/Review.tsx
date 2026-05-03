@@ -57,6 +57,47 @@ const Review = () => {
     const [ratingTouched, setRatingTouched] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [geoLoading, setGeoLoading] = useState(false);
+  const [detecting, setDetecting] = useState(false);
+
+  const handleDetectFromPhoto = async () => {
+    if (photoPreviews.length === 0) {
+      toast.error("Add a photo first to detect the shoe");
+      return;
+    }
+    setDetecting(true);
+    try {
+      const imageBase64 = photoPreviews[0].startsWith("data:") ? photoPreviews[0] : undefined;
+      const imageUrl = !imageBase64 ? photoPreviews[0] : undefined;
+      const { data, error } = await supabase.functions.invoke("identify-shoe-from-image", {
+        body: { imageBase64, imageUrl },
+      });
+      if (error) throw error;
+      if (data?.brandMatch) {
+        setUseCustomBrand(false);
+        setSelectedBrand(data.brandMatch.id);
+        if (data.modelMatch) {
+          setUseCustomModel(false);
+          setSelectedModel(data.modelMatch.id);
+          toast.success(`Detected: ${data.brandMatch.name} ${data.modelMatch.name}`);
+        } else if (data.model) {
+          setUseCustomModel(true);
+          setCustomModel(data.model);
+          toast.info(`Brand detected — please confirm model: ${data.model}`);
+        }
+      } else if (data?.brand && data?.model) {
+        setUseCustomBrand(true);
+        setCustomBrand(data.brand);
+        setCustomModel(data.model);
+        toast.info(`Detected: ${data.brand} ${data.model} — please confirm`);
+      } else {
+        toast.error("Couldn't identify the shoe — please pick manually");
+      }
+    } catch (e: any) {
+      toast.error("Detection failed: " + e.message);
+    } finally {
+      setDetecting(false);
+    }
+  };
 
   // Load existing review for editing
   useQuery({
