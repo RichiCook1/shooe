@@ -39,7 +39,7 @@ const Profile = () => {
     queryKey: ["user-reviews", profileUserId],
     queryFn: async () => {
       if (!profileUserId) return [];
-      const { data } = await supabase.from("reviews").select(`*, model:models(id, name, category, brand:brands(name))`).eq("user_id", profileUserId).order("created_at", { ascending: false });
+      const { data } = await supabase.from("reviews").select(`*, model:models(id, name, category, image_url, brand:brands(name))`).eq("user_id", profileUserId).order("created_at", { ascending: false });
       return data ?? [];
     },
     enabled: !!profileUserId,

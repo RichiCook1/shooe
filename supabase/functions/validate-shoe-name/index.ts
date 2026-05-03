@@ -33,22 +33,25 @@ Deno.serve(async (req) => {
       }
     }
 
-    // 2. Fuzzy-match against existing models
+    // 2. Fuzzy-match against existing models (trigram similarity for typo tolerance)
     if (resolvedBrandId) {
-      const { data: candidates } = await supabase
-        .from("models")
-        .select("id, name")
-        .eq("brand_id", resolvedBrandId);
       const lower = model.toLowerCase().trim();
-      // simple similarity: exact or substring or Levenshtein-like (just substring for speed)
-      const match = (candidates ?? []).find(
-        (c: any) => c.name.toLowerCase().trim() === lower
-      ) || (candidates ?? []).find(
-        (c: any) => {
-          const n = c.name.toLowerCase();
-          return n.includes(lower) || lower.includes(n);
-        }
-      );
+      // Try exact/ilike first
+      const { data: exact } = await supabase
+        .from("models").select("id, name").eq("brand_id", resolvedBrandId).ilike("name", model).limit(1);
+      let match: any = exact?.[0] ?? null;
+      if (!match) {
+        // Trigram similarity via RPC-less workaround: pull all and score in JS
+        const { data: candidates } = await supabase
+          .from("models").select("id, name").eq("brand_id", resolvedBrandId);
+        const score = (a: string, b: string) => {
+          const grams = (s: string) => { const g = new Set<string>(); const t = `  ${s.toLowerCase()}  `; for (let i = 0; i < t.length - 2; i++) g.add(t.slice(i, i + 3)); return g; };
+          const A = grams(a), B = grams(b); let inter = 0; A.forEach(x => { if (B.has(x)) inter++; });
+          return inter / (A.size + B.size - inter || 1);
+        };
+        const ranked = (candidates ?? []).map((c: any) => ({ c, s: score(c.name, model) })).sort((a, b) => b.s - a.s);
+        if (ranked[0] && ranked[0].s >= 0.55) match = ranked[0].c;
+      }
       if (match) {
         return new Response(
           JSON.stringify({ action: "matched", modelId: match.id, brandId: resolvedBrandId, name: match.name }),
@@ -133,6 +136,9 @@ Deno.serve(async (req) => {
         web_check_result: webCheck,
         status: "pending",
       });
+    } else {
+      // Fire-and-forget image enrichment for newly verified models
+      supabase.functions.invoke("enrich-shoe-images", { body: { modelId: newModel.id } }).catch(() => {});
     }
 
     const correctedName = `${resolvedBrandName} ${finalModelName}`;

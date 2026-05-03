@@ -2,6 +2,7 @@ import { NavLink, useLocation } from "react-router-dom";
 import {
   LayoutDashboard,
   Footprints,
+  Activity,
   Inbox,
   Tags,
   Users,
@@ -23,7 +24,8 @@ import {
 
 const items = [
   { title: "Overview", url: "/admin", icon: LayoutDashboard, end: true },
-  { title: "Catalog", url: "/admin/catalog", icon: Footprints },
+  { title: "Catalog", url: "/admin/catalog", icon: Footprints, end: true },
+  { title: "Catalog Health", url: "/admin/catalog/health", icon: Activity },
   { title: "Pending Queue", url: "/admin/queue", icon: Inbox },
   { title: "Fields & Tags", url: "/admin/fields", icon: Tags },
   { title: "Users", url: "/admin/users", icon: Users },

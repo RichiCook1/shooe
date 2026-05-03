@@ -34,7 +34,8 @@ const ReviewCard = ({ review, onClick, onShare }: ReviewCardProps) => {
   const brandModel = [review.model?.brand?.name, review.model?.name].filter(Boolean).join(" ");
   const displayName = review.profile?.display_name || review.profile?.username || null;
   const avatar = review.profile?.avatar_url;
-  const images = review.media_urls ?? [];
+  const userImages = review.media_urls ?? [];
+  const images = userImages.length > 0 ? userImages : (review.model?.image_url ? [review.model.image_url] : []);
   const [imgIdx, setImgIdx] = useState(0);
   const touchStart = useRef<number | null>(null);
   const categoryLabel = review.model?.category ? CATEGORY_LABELS[review.model.category] || review.model.category : null;

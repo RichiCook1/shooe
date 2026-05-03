@@ -19,6 +19,7 @@ import AdminRoute from "./components/AdminRoute";
 import AdminLayout from "./components/admin/AdminLayout";
 import AdminOverview from "./pages/admin/Overview";
 import AdminCatalog from "./pages/admin/Catalog";
+import AdminCatalogHealth from "./pages/admin/CatalogHealth";
 import AdminQueue from "./pages/admin/Queue";
 import AdminFields from "./pages/admin/Fields";
 import AdminUsers from "./pages/admin/Users";
@@ -50,6 +51,7 @@ const App = () => (
             <Route path="/admin" element={<AdminRoute><AdminLayout /></AdminRoute>}>
               <Route index element={<AdminOverview />} />
               <Route path="catalog" element={<AdminCatalog />} />
+              <Route path="catalog/health" element={<AdminCatalogHealth />} />
               <Route path="queue" element={<AdminQueue />} />
               <Route path="fields" element={<AdminFields />} />
               <Route path="users" element={<AdminUsers />} />

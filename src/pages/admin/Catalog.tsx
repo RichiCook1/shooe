@@ -8,11 +8,13 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { Trash2, CheckCircle2, RefreshCw, Sparkles } from "lucide-react";
+import { Trash2, CheckCircle2, RefreshCw, Sparkles, Image as ImageIcon } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 export default function AdminCatalog() {
   const qc = useQueryClient();
   const [search, setSearch] = useState("");
+  const [filter, setFilter] = useState<"all" | "unverified" | "missing_image" | "pending" | "user_submitted">("all");
 
   const { data: brands } = useQuery({
     queryKey: ["admin-brands", search],
@@ -25,13 +27,26 @@ export default function AdminCatalog() {
   });
 
   const { data: models } = useQuery({
-    queryKey: ["admin-models", search],
+    queryKey: ["admin-models", search, filter],
     queryFn: async () => {
       let q = supabase.from("models").select("*, brands(name)").order("created_at", { ascending: false });
       if (search) q = q.ilike("name", `%${search}%`);
-      const { data } = await q.limit(200);
+      if (filter === "unverified") q = q.eq("verified", false);
+      if (filter === "missing_image") q = q.is("image_url", null);
+      if (filter === "pending") q = q.eq("pending_review", true);
+      if (filter === "user_submitted") q = q.eq("source", "user_submitted");
+      const { data } = await q.limit(300);
       return data ?? [];
     },
+  });
+
+  const enrichOne = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.functions.invoke("enrich-shoe-images", { body: { modelId: id } });
+      if (error) throw error;
+    },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["admin-models"] }); toast.success("Image enriched"); },
+    onError: (e: any) => toast.error(e.message),
   });
 
   const verifyModel = useMutation({
@@ -75,7 +90,19 @@ export default function AdminCatalog() {
         </div>
       </div>
 
-      <Input placeholder="Search models or brands..." value={search} onChange={(e) => setSearch(e.target.value)} className="max-w-md rounded-none" />
+      <div className="flex flex-wrap gap-2 items-center">
+        <Input placeholder="Search models or brands..." value={search} onChange={(e) => setSearch(e.target.value)} className="max-w-md rounded-none" />
+        <Select value={filter} onValueChange={(v: any) => setFilter(v)}>
+          <SelectTrigger className="w-48 rounded-none"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All models</SelectItem>
+            <SelectItem value="unverified">Unverified</SelectItem>
+            <SelectItem value="missing_image">Missing image</SelectItem>
+            <SelectItem value="pending">Pending review</SelectItem>
+            <SelectItem value="user_submitted">User submitted</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
 
       <Tabs defaultValue="models">
         <TabsList className="rounded-none">
@@ -88,6 +115,7 @@ export default function AdminCatalog() {
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead className="w-16">Image</TableHead>
                   <TableHead>Name</TableHead>
                   <TableHead>Brand</TableHead>
                   <TableHead>Category</TableHead>
@@ -98,6 +126,15 @@ export default function AdminCatalog() {
               <TableBody>
                 {models?.map((m: any) => (
                   <TableRow key={m.id}>
+                    <TableCell>
+                      {m.image_url ? (
+                        <img src={m.image_url} alt="" className="w-10 h-10 object-cover" />
+                      ) : (
+                        <div className="w-10 h-10 bg-muted flex items-center justify-center text-muted-foreground">
+                          <ImageIcon className="w-4 h-4" />
+                        </div>
+                      )}
+                    </TableCell>
                     <TableCell className="font-medium">{m.name}</TableCell>
                     <TableCell>{m.brands?.name ?? "—"}</TableCell>
                     <TableCell>{m.category}</TableCell>
@@ -107,6 +144,9 @@ export default function AdminCatalog() {
                         <Badge variant="outline" className="rounded-none">Unverified</Badge>}
                     </TableCell>
                     <TableCell className="text-right">
+                      <Button size="sm" variant="ghost" onClick={() => enrichOne.mutate(m.id)} className="h-8" title="Fetch image">
+                        <ImageIcon className="w-4 h-4" />
+                      </Button>
                       {!m.verified && (
                         <Button size="sm" variant="ghost" onClick={() => verifyModel.mutate(m.id)} className="h-8">
                           <CheckCircle2 className="w-4 h-4" />
