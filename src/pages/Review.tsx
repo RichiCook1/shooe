@@ -57,6 +57,47 @@ const Review = () => {
     const [ratingTouched, setRatingTouched] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [geoLoading, setGeoLoading] = useState(false);
+  const [detecting, setDetecting] = useState(false);
+
+  const handleDetectFromPhoto = async () => {
+    if (photoPreviews.length === 0) {
+      toast.error("Add a photo first to detect the shoe");
+      return;
+    }
+    setDetecting(true);
+    try {
+      const imageBase64 = photoPreviews[0].startsWith("data:") ? photoPreviews[0] : undefined;
+      const imageUrl = !imageBase64 ? photoPreviews[0] : undefined;
+      const { data, error } = await supabase.functions.invoke("identify-shoe-from-image", {
+        body: { imageBase64, imageUrl },
+      });
+      if (error) throw error;
+      if (data?.brandMatch) {
+        setUseCustomBrand(false);
+        setSelectedBrand(data.brandMatch.id);
+        if (data.modelMatch) {
+          setUseCustomModel(false);
+          setSelectedModel(data.modelMatch.id);
+          toast.success(`Detected: ${data.brandMatch.name} ${data.modelMatch.name}`);
+        } else if (data.model) {
+          setUseCustomModel(true);
+          setCustomModel(data.model);
+          toast.info(`Brand detected — please confirm model: ${data.model}`);
+        }
+      } else if (data?.brand && data?.model) {
+        setUseCustomBrand(true);
+        setCustomBrand(data.brand);
+        setCustomModel(data.model);
+        toast.info(`Detected: ${data.brand} ${data.model} — please confirm`);
+      } else {
+        toast.error("Couldn't identify the shoe — please pick manually");
+      }
+    } catch (e: any) {
+      toast.error("Detection failed: " + e.message);
+    } finally {
+      setDetecting(false);
+    }
+  };
 
   // Load existing review for editing
   useQuery({
@@ -213,51 +254,46 @@ const Review = () => {
 
       let modelId = selectedModel;
 
-      if (useCustomBrand && customBrand && customModel) {
-        let brandId: string;
-        const { data: existingBrand } = await supabase.from("brands").select("id").ilike("name", customBrand).maybeSingle();
-        if (existingBrand) {
-          brandId = existingBrand.id;
-        } else {
-          const { data: newBrand, error: brandErr } = await supabase.from("brands").insert({ name: customBrand }).select().single();
-          if (brandErr) {
-            toast.error("Could not create brand. Please try again.");
-            setSubmitting(false);
-            return;
+      // Smart validation for custom brand/model names via edge function
+      if ((useCustomBrand || useCustomModel) && customModel) {
+        const brandToCheck = useCustomBrand
+          ? customBrand
+          : (brands?.find((b) => b.id === selectedBrand)?.name ?? "");
+        try {
+          const { data: result, error: vErr } = await supabase.functions.invoke("validate-shoe-name", {
+            body: {
+              brand: brandToCheck,
+              model: customModel,
+              brandId: useCustomBrand ? undefined : selectedBrand,
+            },
+          });
+          if (vErr || !result?.modelId) throw vErr ?? new Error("validation failed");
+          modelId = result.modelId;
+          if (result.action === "matched") toast.success(`Linked to "${result.name}"`);
+          else if (result.action === "corrected") toast.success(`Saved as "${result.name}"`);
+          else if (result.action === "queued") toast.info("Submitted — admin will verify the name shortly.");
+        } catch (e) {
+          // Fallback path
+          let brandId: string | null = useCustomBrand ? null : selectedBrand;
+          if (useCustomBrand && customBrand) {
+            const { data: existingBrand } = await supabase.from("brands").select("id").ilike("name", customBrand).maybeSingle();
+            if (existingBrand) brandId = existingBrand.id;
+            else {
+              const { data: newBrand } = await supabase.from("brands").insert({ name: customBrand }).select().single();
+              brandId = newBrand?.id ?? null;
+            }
           }
-          brandId = newBrand.id;
-        }
-
-        const { data: existingModel } = await supabase.from("models").select("id").eq("brand_id", brandId).ilike("name", customModel).maybeSingle();
-        if (existingModel) {
-          modelId = existingModel.id;
-        } else {
-          const { data: newModel, error: modelErr } = await supabase.from("models").insert({ name: customModel, brand_id: brandId, category: (shoeCategory as any) || null }).select().single();
-          if (modelErr) {
-            toast.error("Could not create model. Please try again.");
-            setSubmitting(false);
-            return;
+          if (brandId && customModel) {
+            const { data: existingModel } = await supabase.from("models").select("id").eq("brand_id", brandId).ilike("name", customModel).maybeSingle();
+            if (existingModel) modelId = existingModel.id;
+            else {
+              const { data: newModel } = await supabase.from("models").insert({ name: customModel, brand_id: brandId, category: (shoeCategory as any) || null, pending_review: true }).select().single();
+              modelId = newModel?.id ?? modelId;
+            }
           }
-          modelId = newModel.id;
-        }
-      } else if (useCustomModel && selectedBrand && customModel) {
-        const brandId = selectedBrand;
-        const { data: existingModel } = await supabase
-          .from("models").select("id")
-          .eq("brand_id", brandId).ilike("name", customModel).maybeSingle();
-        if (existingModel) {
-          modelId = existingModel.id;
-        } else {
-          const { data: newModel, error: modelErr } = await supabase
-            .from("models").insert({ name: customModel, brand_id: brandId, category: (shoeCategory as any) || null }).select().single();
-          if (modelErr) {
-            toast.error("Could not create model. Please try again.");
-            setSubmitting(false);
-            return;
-          }
-          modelId = newModel.id;
         }
       }
+
 
       // Update category on existing model if selected
       if (!useCustomBrand && !useCustomModel && shoeCategory && modelId) {
@@ -372,6 +408,11 @@ const Review = () => {
             </div>
 
             <div className="space-y-4">
+              {photoPreviews.length > 0 && (
+                <Button type="button" variant="outline" size="sm" onClick={handleDetectFromPhoto} disabled={detecting} className="w-full">
+                  <Camera className="w-4 h-4 mr-2" /> {detecting ? "Detecting..." : "Detect shoe from photo"}
+                </Button>
+              )}
               {!useCustomBrand ? (
                 <>
                   <div>

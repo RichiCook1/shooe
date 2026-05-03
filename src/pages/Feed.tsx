@@ -9,6 +9,7 @@ import ReviewDetailModal from "@/components/ReviewDetailModal";
 import FeedFilters from "@/components/FeedFilters";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import UserSearch from "@/components/UserSearch";
+import ShoeSearch from "@/components/ShoeSearch";
 
 const Feed = () => {
   const navigate = useNavigate();
@@ -87,6 +88,9 @@ const Feed = () => {
     <div className="min-h-screen bg-background">
       <Navbar />
       <main className="container mx-auto px-4 py-6 max-w-6xl">
+        <div className="mb-4">
+          <ShoeSearch />
+        </div>
         <FeedFilters
           brand={brand} category={category} sort={sort} country={country} city={city}
           onBrandChange={setBrand} onCategoryChange={setCategory} onSortChange={setSort}
