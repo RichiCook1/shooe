@@ -4,6 +4,8 @@ import { Link, useNavigate, useLocation } from "react-router-dom";
 import { PenSquare, LogOut, User, Rss, Search, Bell, MessageCircle, Bookmark, Mountain } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import UserSearch from "@/components/UserSearch";
+import { useIsAdmin } from "@/hooks/useIsAdmin";
+import { Shield } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import {
@@ -21,6 +23,7 @@ const Navbar = () => {
   const location = useLocation();
   const queryClient = useQueryClient();
   const [searchOpen, setSearchOpen] = useState(false);
+  const { isAdmin } = useIsAdmin();
 
   const handleSignOut = async () => {
     await signOut();
@@ -188,6 +191,11 @@ const Navbar = () => {
                   <DropdownMenuItem onClick={() => navigate("/saved")} className="gap-2 cursor-pointer">
                     <Bookmark className="w-4 h-4" /> Saved Reviews
                   </DropdownMenuItem>
+                  {isAdmin && (
+                    <DropdownMenuItem onClick={() => navigate("/admin")} className="gap-2 cursor-pointer">
+                      <Shield className="w-4 h-4" /> Admin
+                    </DropdownMenuItem>
+                  )}
                   <DropdownMenuSeparator />
                   <DropdownMenuItem onClick={handleSignOut} className="gap-2 cursor-pointer text-destructive">
                     <LogOut className="w-4 h-4" /> Log Out
