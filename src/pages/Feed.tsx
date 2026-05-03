@@ -9,6 +9,7 @@ import ReviewDetailModal from "@/components/ReviewDetailModal";
 import FeedFilters from "@/components/FeedFilters";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import UserSearch from "@/components/UserSearch";
+import ShoeSearch from "@/components/ShoeSearch";
 
 const Feed = () => {
   const navigate = useNavigate();
