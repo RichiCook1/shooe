@@ -2,6 +2,7 @@ import { NavLink, useLocation } from "react-router-dom";
 import {
   LayoutDashboard,
   Footprints,
+  Activity,
   Inbox,
   Tags,
   Users,
