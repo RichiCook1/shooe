@@ -15,6 +15,15 @@ import SavedReviews from "./pages/SavedReviews";
 import Sherpa from "./pages/Sherpa";
 import Model from "./pages/Model";
 import ProtectedRoute from "./components/ProtectedRoute";
+import AdminRoute from "./components/AdminRoute";
+import AdminLayout from "./components/admin/AdminLayout";
+import AdminOverview from "./pages/admin/Overview";
+import AdminCatalog from "./pages/admin/Catalog";
+import AdminQueue from "./pages/admin/Queue";
+import AdminFields from "./pages/admin/Fields";
+import AdminUsers from "./pages/admin/Users";
+import AdminModeration from "./pages/admin/Moderation";
+import AdminAnalytics from "./pages/admin/Analytics";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -38,6 +47,15 @@ const App = () => (
             <Route path="/saved" element={<ProtectedRoute><SavedReviews /></ProtectedRoute>} />
             <Route path="/sherpa" element={<Sherpa />} />
             <Route path="/model/:modelId" element={<Model />} />
+            <Route path="/admin" element={<AdminRoute><AdminLayout /></AdminRoute>}>
+              <Route index element={<AdminOverview />} />
+              <Route path="catalog" element={<AdminCatalog />} />
+              <Route path="queue" element={<AdminQueue />} />
+              <Route path="fields" element={<AdminFields />} />
+              <Route path="users" element={<AdminUsers />} />
+              <Route path="moderation" element={<AdminModeration />} />
+              <Route path="analytics" element={<AdminAnalytics />} />
+            </Route>
             <Route path="*" element={<NotFound />} />
           </Routes>
         </AuthProvider>
