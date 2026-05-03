@@ -165,15 +165,43 @@ const Review = () => {
       toast.error("Maximum 5 photos allowed");
       return;
     }
+    const wasEmpty = photos.length + existingMediaUrls.length === 0;
     // Compress images before adding
     const compressed = await Promise.all(files.map((f) => compressImage(f)));
     setPhotos((prev) => [...prev, ...compressed]);
-    compressed.forEach((f) => {
+    const previews = await Promise.all(compressed.map((f) => new Promise<string>((res) => {
       const reader = new FileReader();
-      reader.onload = (ev) => setPhotoPreviews((prev) => [...prev, ev.target?.result as string]);
+      reader.onload = (ev) => res(ev.target?.result as string);
       reader.readAsDataURL(f);
-    });
-  }, [photos.length, existingMediaUrls.length]);
+    })));
+    setPhotoPreviews((prev) => [...prev, ...previews]);
+
+    // Auto-detect on first photo, only if no shoe yet picked
+    if (wasEmpty && previews[0] && !selectedModel && !customModel) {
+      setDetecting(true);
+      supabase.functions.invoke("identify-shoe-from-image", { body: { imageBase64: previews[0] } })
+        .then(({ data }) => {
+          if (data?.brandMatch) {
+            setUseCustomBrand(false);
+            setSelectedBrand(data.brandMatch.id);
+            if (data.modelMatch) {
+              setUseCustomModel(false);
+              setSelectedModel(data.modelMatch.id);
+              toast.success(`Detected: ${data.brandMatch.name} ${data.modelMatch.name}`);
+            } else if (data.model) {
+              setUseCustomModel(true);
+              setCustomModel(data.model);
+            }
+          } else if (data?.brand && data?.model && data?.confidence >= 0.5) {
+            setUseCustomBrand(true);
+            setCustomBrand(data.brand);
+            setCustomModel(data.model);
+          }
+        })
+        .catch(() => {})
+        .finally(() => setDetecting(false));
+    }
+  }, [photos.length, existingMediaUrls.length, selectedModel, customModel]);
 
   const removePhoto = (idx: number) => {
     if (idx < existingMediaUrls.length) {
