@@ -213,51 +213,46 @@ const Review = () => {
 
       let modelId = selectedModel;
 
-      if (useCustomBrand && customBrand && customModel) {
-        let brandId: string;
-        const { data: existingBrand } = await supabase.from("brands").select("id").ilike("name", customBrand).maybeSingle();
-        if (existingBrand) {
-          brandId = existingBrand.id;
-        } else {
-          const { data: newBrand, error: brandErr } = await supabase.from("brands").insert({ name: customBrand }).select().single();
-          if (brandErr) {
-            toast.error("Could not create brand. Please try again.");
-            setSubmitting(false);
-            return;
+      // Smart validation for custom brand/model names via edge function
+      if ((useCustomBrand || useCustomModel) && customModel) {
+        const brandToCheck = useCustomBrand
+          ? customBrand
+          : (brands?.find((b) => b.id === selectedBrand)?.name ?? "");
+        try {
+          const { data: result, error: vErr } = await supabase.functions.invoke("validate-shoe-name", {
+            body: {
+              brand: brandToCheck,
+              model: customModel,
+              brandId: useCustomBrand ? undefined : selectedBrand,
+            },
+          });
+          if (vErr || !result?.modelId) throw vErr ?? new Error("validation failed");
+          modelId = result.modelId;
+          if (result.action === "matched") toast.success(`Linked to "${result.name}"`);
+          else if (result.action === "corrected") toast.success(`Saved as "${result.name}"`);
+          else if (result.action === "queued") toast.info("Submitted — admin will verify the name shortly.");
+        } catch (e) {
+          // Fallback path
+          let brandId: string | null = useCustomBrand ? null : selectedBrand;
+          if (useCustomBrand && customBrand) {
+            const { data: existingBrand } = await supabase.from("brands").select("id").ilike("name", customBrand).maybeSingle();
+            if (existingBrand) brandId = existingBrand.id;
+            else {
+              const { data: newBrand } = await supabase.from("brands").insert({ name: customBrand }).select().single();
+              brandId = newBrand?.id ?? null;
+            }
           }
-          brandId = newBrand.id;
-        }
-
-        const { data: existingModel } = await supabase.from("models").select("id").eq("brand_id", brandId).ilike("name", customModel).maybeSingle();
-        if (existingModel) {
-          modelId = existingModel.id;
-        } else {
-          const { data: newModel, error: modelErr } = await supabase.from("models").insert({ name: customModel, brand_id: brandId, category: (shoeCategory as any) || null }).select().single();
-          if (modelErr) {
-            toast.error("Could not create model. Please try again.");
-            setSubmitting(false);
-            return;
+          if (brandId && customModel) {
+            const { data: existingModel } = await supabase.from("models").select("id").eq("brand_id", brandId).ilike("name", customModel).maybeSingle();
+            if (existingModel) modelId = existingModel.id;
+            else {
+              const { data: newModel } = await supabase.from("models").insert({ name: customModel, brand_id: brandId, category: (shoeCategory as any) || null, pending_review: true }).select().single();
+              modelId = newModel?.id ?? modelId;
+            }
           }
-          modelId = newModel.id;
-        }
-      } else if (useCustomModel && selectedBrand && customModel) {
-        const brandId = selectedBrand;
-        const { data: existingModel } = await supabase
-          .from("models").select("id")
-          .eq("brand_id", brandId).ilike("name", customModel).maybeSingle();
-        if (existingModel) {
-          modelId = existingModel.id;
-        } else {
-          const { data: newModel, error: modelErr } = await supabase
-            .from("models").insert({ name: customModel, brand_id: brandId, category: (shoeCategory as any) || null }).select().single();
-          if (modelErr) {
-            toast.error("Could not create model. Please try again.");
-            setSubmitting(false);
-            return;
-          }
-          modelId = newModel.id;
         }
       }
+
 
       // Update category on existing model if selected
       if (!useCustomBrand && !useCustomModel && shoeCategory && modelId) {
