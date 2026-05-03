@@ -180,7 +180,17 @@ const ReviewCard = ({ review, onClick, onShare }: ReviewCardProps) => {
 
         {/* Shoe + rating (for no-image reviews) */}
         <div className="flex items-center justify-between">
-          <h3 className="font-display font-bold text-lg">{brandModel || "Unknown Shoe"}</h3>
+          {review.model?.id ? (
+            <Link
+              to={`/model/${review.model.id}`}
+              className="font-display font-bold text-lg hover:underline"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {brandModel || "Unknown Shoe"}
+            </Link>
+          ) : (
+            <h3 className="font-display font-bold text-lg">{brandModel || "Unknown Shoe"}</h3>
+          )}
           {review.rating != null && images.length === 0 && (
             <div className="flex items-baseline gap-0.5">
               <span className="text-xl font-bold font-display text-primary">{review.rating}</span>
