@@ -20,7 +20,7 @@ Deno.serve(async (req) => {
       .from("catalog_jobs").insert({ job_name: "discover-new-shoes", status: "running" }).select().single();
 
     const body = await req.json().catch(() => ({}));
-    const limit = body?.limit ?? 5;
+    const limit = body?.limit ?? 100;
     const year = body?.year ?? new Date().getFullYear();
     const errors: any[] = [];
     let added = 0, updated = 0;
