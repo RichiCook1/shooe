@@ -408,6 +408,11 @@ const Review = () => {
             </div>
 
             <div className="space-y-4">
+              {photoPreviews.length > 0 && (
+                <Button type="button" variant="outline" size="sm" onClick={handleDetectFromPhoto} disabled={detecting} className="w-full">
+                  <Camera className="w-4 h-4 mr-2" /> {detecting ? "Detecting..." : "Detect shoe from photo"}
+                </Button>
+              )}
               {!useCustomBrand ? (
                 <>
                   <div>
