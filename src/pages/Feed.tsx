@@ -26,7 +26,7 @@ const Feed = () => {
   const { data: reviews, isLoading } = useQuery({
     queryKey: ["feed-reviews", brand, category, sort, country, city],
     queryFn: async () => {
-      let query = supabase.from("reviews").select(`*, model:models(id, name, category, brand_id, brand:brands(name))`);
+      let query = supabase.from("reviews").select(`*, model:models(id, name, category, image_url, brand_id, brand:brands(name))`);
       if (sort === "recent") query = query.order("created_at", { ascending: false });
       else if (sort === "rating") query = query.order("rating", { ascending: false });
       else if (sort === "popular") query = query.order("created_at", { ascending: false }); // will sort by likes client-side
@@ -58,7 +58,7 @@ const Feed = () => {
       } else {
         supabase
           .from("reviews")
-          .select(`*, model:models(id, name, category, brand_id, brand:brands(name))`)
+          .select(`*, model:models(id, name, category, image_url, brand_id, brand:brands(name))`)
           .eq("id", reviewId)
           .single()
           .then(async ({ data }) => {
