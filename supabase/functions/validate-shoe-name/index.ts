@@ -136,6 +136,9 @@ Deno.serve(async (req) => {
         web_check_result: webCheck,
         status: "pending",
       });
+    } else {
+      // Fire-and-forget image enrichment for newly verified models
+      supabase.functions.invoke("enrich-shoe-images", { body: { modelId: newModel.id } }).catch(() => {});
     }
 
     const correctedName = `${resolvedBrandName} ${finalModelName}`;
