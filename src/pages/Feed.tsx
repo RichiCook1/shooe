@@ -88,6 +88,9 @@ const Feed = () => {
     <div className="min-h-screen bg-background">
       <Navbar />
       <main className="container mx-auto px-4 py-6 max-w-6xl">
+        <div className="mb-4">
+          <ShoeSearch />
+        </div>
         <FeedFilters
           brand={brand} category={category} sort={sort} country={country} city={city}
           onBrandChange={setBrand} onCategoryChange={setCategory} onSortChange={setSort}
