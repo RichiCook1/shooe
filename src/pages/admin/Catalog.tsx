@@ -14,6 +14,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 export default function AdminCatalog() {
   const qc = useQueryClient();
   const [search, setSearch] = useState("");
+  const [filter, setFilter] = useState<"all" | "unverified" | "missing_image" | "pending" | "user_submitted">("all");
 
   const { data: brands } = useQuery({
     queryKey: ["admin-brands", search],
@@ -26,13 +27,26 @@ export default function AdminCatalog() {
   });
 
   const { data: models } = useQuery({
-    queryKey: ["admin-models", search],
+    queryKey: ["admin-models", search, filter],
     queryFn: async () => {
       let q = supabase.from("models").select("*, brands(name)").order("created_at", { ascending: false });
       if (search) q = q.ilike("name", `%${search}%`);
-      const { data } = await q.limit(200);
+      if (filter === "unverified") q = q.eq("verified", false);
+      if (filter === "missing_image") q = q.is("image_url", null);
+      if (filter === "pending") q = q.eq("pending_review", true);
+      if (filter === "user_submitted") q = q.eq("source", "user_submitted");
+      const { data } = await q.limit(300);
       return data ?? [];
     },
+  });
+
+  const enrichOne = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.functions.invoke("enrich-shoe-images", { body: { modelId: id } });
+      if (error) throw error;
+    },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["admin-models"] }); toast.success("Image enriched"); },
+    onError: (e: any) => toast.error(e.message),
   });
 
   const verifyModel = useMutation({
