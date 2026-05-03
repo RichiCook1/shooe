@@ -37,6 +37,7 @@ const App = () => (
             <Route path="/messages" element={<ProtectedRoute><Messages /></ProtectedRoute>} />
             <Route path="/saved" element={<ProtectedRoute><SavedReviews /></ProtectedRoute>} />
             <Route path="/sherpa" element={<Sherpa />} />
+            <Route path="/model/:modelId" element={<Model />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </AuthProvider>
