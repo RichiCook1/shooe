@@ -14,6 +14,7 @@ import Messages from "./pages/Messages";
 import SavedReviews from "./pages/SavedReviews";
 import Sherpa from "./pages/Sherpa";
 import Model from "./pages/Model";
+import Brand from "./pages/Brand";
 import ProtectedRoute from "./components/ProtectedRoute";
 import AdminRoute from "./components/AdminRoute";
 import AdminLayout from "./components/admin/AdminLayout";
@@ -48,6 +49,7 @@ const App = () => (
             <Route path="/saved" element={<ProtectedRoute><SavedReviews /></ProtectedRoute>} />
             <Route path="/sherpa" element={<Sherpa />} />
             <Route path="/model/:modelId" element={<Model />} />
+            <Route path="/brand/:brandId" element={<Brand />} />
             <Route path="/admin" element={<AdminRoute><AdminLayout /></AdminRoute>}>
               <Route index element={<AdminOverview />} />
               <Route path="catalog" element={<AdminCatalog />} />

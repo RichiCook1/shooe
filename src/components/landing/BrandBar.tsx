@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 
 const BrandBar = () => {
@@ -16,12 +17,13 @@ const BrandBar = () => {
       <div className="container mx-auto px-4">
         <div className="flex flex-wrap items-center justify-center gap-8 md:gap-14">
           {brands?.map((brand) => (
-            <span
+            <Link
               key={brand.id}
-              className="text-sm uppercase tracking-[0.15em] font-medium text-muted-foreground/40 hover:text-foreground transition-colors cursor-default"
+              to={`/brand/${brand.id}`}
+              className="text-sm uppercase tracking-[0.15em] font-medium text-muted-foreground/40 hover:text-foreground transition-colors"
             >
               {brand.name}
-            </span>
+            </Link>
           ))}
         </div>
       </div>
