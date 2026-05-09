@@ -3,7 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { MapPin, ArrowRight, Mountain } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Link } from "react-router-dom";
-import { formatLocationCityCountry } from "@/lib/imageCompression";
+import { formatLocationCityCountry, getStorageThumb } from "@/lib/imageCompression";
 import StatsSection from "./StatsSection";
 
 const FeaturedReviews = () => {
@@ -122,10 +122,11 @@ const FeaturedReviews = () => {
                     >
                       {images.length > 0 && (
                         <img
-                          src={images[0]}
+                          src={getStorageThumb(images[0], { width: 600, quality: 70 }) || images[0]}
                           alt={model?.name}
                           className="w-full h-40 object-cover"
                           loading="lazy"
+                          decoding="async"
                         />
                       )}
                       <div className="p-5">
