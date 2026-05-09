@@ -1,78 +1,75 @@
+## Goal
+The app feels slow mainly because of heavy images and inefficient data loading. Average uploaded review photo is **2.4 MB** (storage holds 205 MB across 86 files), the feed runs many small per-card queries, and the whole app loads as one JS bundle.
 
-# Shoe Catalog System — Plan
+## What we'll change
 
-## What already exists
+### 1. Smaller images (biggest win)
 
-- `brands` + `models` tables, with `verified`, `pending_review`, `source`, `image_url` columns.
-- `model_review_queue` for user-submitted names that fail verification.
-- Edge functions:
-  - `seed-brand-catalog` — scrapes one brand (Firecrawl + Perplexity fallback).
-  - `discover-new-shoes` — sweeps all brands for current-year releases (Perplexity).
-  - `validate-shoe-name` — fuzzy-matches user input, falls back to Perplexity, queues unknowns.
-  - `identify-shoe-from-image` — vision model returns `{brand, model, confidence}` and matches catalog.
-- Admin pages `/admin/catalog` and `/admin/queue` (manual triggers, approve/reject).
+**a. Compress harder on upload** — `src/lib/imageCompression.ts`
+- Lower max dimensions: 1600 → for photos shown at most ~800 px wide on screen
+- Lower JPEG quality: 0.82 → 0.72
+- Lower size threshold: always re-encode if > 400 KB (currently skips anything < 1 MB)
+- Output WebP when supported (much smaller than JPEG at same quality)
+- Use `createImageBitmap` instead of `<img>` for faster decode
 
-The pipeline is in place but: there is no schedule, no brand seed list, no shoe image enrichment, no Google-Lens-style suggestion in the review flow, and no visibility into catalog coverage / job history.
+**b. Serve resized versions of existing images** via Supabase image transformations
+- Add a small helper `getStorageThumb(url, { width, quality })` that rewrites `/object/public/...` URLs to `/render/image/public/...?width=…&quality=…&format=origin`
+- Use it in:
+  - `ReviewCard` (cards: width 800, quality 70)
+  - `FeaturedReviews` (thumbs: width 600, quality 70)
+  - `Profile`, `Model`, `Brand`, `SavedReviews` grids (width 400, quality 65)
+  - Avatars (width 80)
+- Add `decoding="async"` and `fetchpriority="low"` to lazy images; first hero image keeps `fetchpriority="high"`.
 
-## Gaps to fill
+### 2. Cut request waterfalls in the Feed
 
-### 1. Seed the brand list
-Currently `brands` is whatever users typed. Insert a curated starter list (~50 brands) covering road / trail / racing / climbing / hiking / hiking boots, each with `website` so `seed-brand-catalog` can scrape them.
+`src/components/ReviewCard.tsx` currently fires **3 queries per card** (likes, comment count, saved). With 50 cards that's 150 round-trips.
+- Move these into the parent `Feed` (and `FeaturedReviews`, `Profile`) as **single batched queries**:
+  - `likes`: `select(review_id, user_id).in('review_id', ids)` → group client-side
+  - `comments`: `select('review_id', { count: 'exact' })` per page → use a single `select(review_id).in(...)` and count in JS
+  - `saved`: `select(review_id).eq('user_id', me).in('review_id', ids)`
+- Pass `likeCount`, `isLiked`, `commentCount`, `isSaved` down as props. ReviewCard no longer queries on mount.
 
-Brands: Nike, Adidas, Asics, Hoka, Saucony, Brooks, New Balance, On, Mizuno, Puma, Altra, Topo Athletic, Salomon, La Sportiva, Scarpa, Merrell, Inov-8, Norda, NNormal, Speedland, Craft, Vibram, Decathlon Kiprun, Mount To Coast, Tecnica, Lowa, Meindl, Hanwag, Arc'teryx, Five Ten, Black Diamond, Evolv, Tenaya, Boreal, Mad Rock, Unparallel, Butora, So iLL, etc.
+### 3. Smarter React Query defaults
 
-### 2. Schedule the discovery jobs (cron)
-Enable `pg_cron` + `pg_net` and schedule:
-- **Weekly** — `discover-new-shoes` (current year + previous year), batched 10 brands per run.
-- **Monthly** — `seed-brand-catalog` rotating through all brands (one per minute) to refresh full catalogs.
-Each invocation already logs to `catalog_jobs`.
+In `src/App.tsx`, configure the `QueryClient` with:
+- `staleTime: 60_000`
+- `gcTime: 5 * 60_000`
+- `refetchOnWindowFocus: false`
+- `retry: 1`
 
-### 3. Enrich shoe images
-New edge function `enrich-shoe-image`:
-- Input: `modelId` (or run for all `image_url IS NULL`).
-- Uses Firecrawl to scrape the brand site for the model name and pull the product hero image, falling back to a Perplexity image-URL lookup.
-- Downloads, uploads to `shoe-photos` bucket (public), saves URL to `models.image_url`.
-- Triggered: (a) automatically after `validate-shoe-name` approves a model, (b) by a nightly cron sweep over models missing images, (c) manually from admin Catalog row.
+This stops repeated refetches when navigating between pages.
 
-### 4. Image-based suggestion in the review flow
-`identify-shoe-from-image` already exists; wire it into `Review.tsx`:
-- When the user adds the first photo, call the function in the background.
-- If `confidence >= 0.6` and a `modelMatch` exists → pre-select the shoe and show a "Detected: Brand Model — change?" chip.
-- If only `brandMatch` exists → pre-select brand and surface model suggestion text.
-- If no match but high confidence → prefill the custom-name inputs and let `validate-shoe-name` take over on submit.
+### 4. Code-split routes
 
-### 5. Admin "Catalog Health" page
-New route `/admin/catalog/health` (or add a tab to existing Catalog page):
-- Stats: total brands, total models, % verified, % with image, models added last 7/30 days.
-- `catalog_jobs` history table with status, counts, errors, duration.
-- Buttons: "Run discovery now", "Run image enrichment now", "Seed brand X" (per-brand action with progress).
-- Filter on Models table: `unverified`, `missing image`, `pending review`, `source=user_submitted`.
-- Bulk actions: verify selected, delete selected, enrich images for selected.
+Convert `src/App.tsx` route imports to `React.lazy` + `<Suspense>`:
+- Admin pages, `Sherpa`, `Messages`, `EditProfile`, `SavedReviews`, `Brand`, `Model`, `Review` are heavy and rarely needed on first paint.
+- Keep `Index`, `Login`, `Feed` eager.
 
-### 6. Improve `validate-shoe-name`
-- Replace substring fuzzy match with Postgres `pg_trgm` similarity (extension is already installed) for real typo tolerance.
-- After successful creation, fire-and-forget call to `enrich-shoe-image` for the new model.
-- When queueing, also create a `notifications` row for every admin user so they see new pending submissions in the bell.
+This shrinks the initial JS bundle significantly.
 
-## Technical changes
+### 5. Smaller initial Feed page
 
-### Migration
-- Insert curated brand list (idempotent on `name`).
-- Enable `pg_cron`, `pg_net`.
-- Schedule the two cron jobs (weekly / monthly).
-- Add column `models.image_status` enum (`none|fetching|ok|failed`) for enrichment tracking.
+- Lower default `.limit(50)` → `.limit(15)` and add a "Load more" button (or infinite scroll later).
+- Move filters that we apply client-side (brand/category/city/country) into the SQL query so we don't fetch rows we'll discard.
 
-### Edge functions
-- New: `enrich-shoe-image` (Firecrawl scrape → upload to `shoe-photos` → update `models`).
-- Edit: `validate-shoe-name` (trigram match, post-create enrichment, admin notifications).
-- Edit: `discover-new-shoes` (accept `offset` param so cron can rotate through all brands instead of `limit` cap).
+### 6. Service worker
+`public/sw.js` already does stale-while-revalidate. Confirm it's caching Supabase storage GETs (images) — if not, add a cache rule for `*.supabase.co/storage/v1/object/public/*` and `/render/image/public/*` so repeat visits are instant.
 
-### Frontend
-- `src/pages/Review.tsx` — call `identify-shoe-from-image` on first photo; show a "Detected" badge with one-tap accept.
-- `src/components/ReviewCard.tsx` (and any model display) — fall back to `models.image_url` when the user uploaded no media.
-- `src/pages/admin/Catalog.tsx` — add filters (unverified / missing image / pending), bulk actions, per-row "Enrich image" button, and a "Catalog Health" stats header with `catalog_jobs` history list.
-- `src/pages/admin/Queue.tsx` — show suggested image when present.
+## Out of scope (can do later)
+- Backfill job to re-encode existing 2.4 MB photos in storage to WebP. The Supabase transformation CDN above already gives us small versions on the fly, so this is optional.
+- Switching to a CDN like Cloudflare Images.
 
-## Out of scope (explicit)
-- True reverse-image-search across the whole web (would need SerpAPI/Bing Visual Search and a paid plan). The vision-model approach in step 4 already handles "Google Lens-style" suggestion well enough for v1.
-- Multi-angle / colorway-level image variants.
+## Expected impact
+- First contentful image on Feed/landing should drop from ~2.4 MB to ~80–150 KB per card.
+- Feed network requests drop from ~150+ to ~5.
+- Initial JS payload roughly halved by route splitting.
+
+## Files touched
+- `src/lib/imageCompression.ts` (stronger compression + helper export)
+- `src/components/ReviewCard.tsx` (accept props, drop internal queries)
+- `src/components/landing/FeaturedReviews.tsx` (thumb URLs, batched tags already done)
+- `src/pages/Feed.tsx` (batched likes/comments/saved, smaller limit, server-side filters)
+- `src/pages/Profile.tsx`, `src/pages/Model.tsx`, `src/pages/Brand.tsx`, `src/pages/SavedReviews.tsx` (thumb URLs + batched data where they render cards)
+- `src/App.tsx` (QueryClient config + lazy routes)
+- `public/sw.js` (image cache rule, if missing)
