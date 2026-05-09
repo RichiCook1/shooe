@@ -58,7 +58,8 @@ const Brand = () => {
               >
                 <div className="aspect-square bg-muted flex items-center justify-center overflow-hidden">
                   {m.image_url ? (
-                    <img src={m.image_url} alt={m.name} className="w-full h-full object-contain group-hover:scale-105 transition-transform" />
+                    <img src={getStorageThumb(m.image_url, { width: 400, quality: 70, resize: "contain" }) || m.image_url} alt={m.name} className="w-full h-full object-contain group-hover:scale-105 transition-transform" loading="lazy" decoding="async" />
+                  
                   ) : (
                     <span className="text-xs text-muted-foreground">No image</span>
                   )}
