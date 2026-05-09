@@ -76,6 +76,7 @@ export function Combobox({
             placeholder={searchPlaceholder}
             value={query}
             onValueChange={setQuery}
+            className="h-12 text-base font-medium placeholder:text-foreground/60 placeholder:font-normal"
           />
           <CommandList>
             <CommandEmpty>
