@@ -13,6 +13,7 @@ import { Settings, UserPlus, UserMinus, MessageCircle, X, Edit2 } from "lucide-r
 import { toast } from "sonner";
 import { useState } from "react";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { getStorageThumb } from "@/lib/imageCompression";
 
 const Profile = () => {
   const { userId } = useParams();
@@ -152,7 +153,7 @@ const Profile = () => {
         <div className="flex items-start gap-6 mb-8">
           <div className="w-20 h-20 rounded-full bg-muted flex items-center justify-center overflow-hidden shrink-0">
             {profile?.avatar_url ? (
-              <img src={profile.avatar_url} alt="" className="w-full h-full object-cover" />
+              <img src={getStorageThumb(profile.avatar_url, { width: 160, quality: 75 }) || profile.avatar_url} alt="" className="w-full h-full object-cover" decoding="async" />
             ) : (
               <span className="text-2xl font-bold text-muted-foreground">{displayName[0]?.toUpperCase()}</span>
             )}
@@ -252,7 +253,7 @@ const Profile = () => {
                   >
                     <div className="aspect-square bg-muted overflow-hidden">
                       {shoe.coverImage ? (
-                        <img src={shoe.coverImage} alt={shoe.modelName} className="w-full h-full object-cover" loading="lazy" />
+                        <img src={getStorageThumb(shoe.coverImage, { width: 400, quality: 65 }) || shoe.coverImage} alt={shoe.modelName} className="w-full h-full object-cover" loading="lazy" decoding="async" />
                       ) : (
                         <div className="w-full h-full flex items-center justify-center text-muted-foreground text-sm">No photo</div>
                       )}

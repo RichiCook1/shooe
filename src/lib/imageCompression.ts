@@ -1,13 +1,29 @@
 /**
- * Client-side image compression utility.
- * Compresses images before upload to reduce file sizes and improve loading times.
+ * Client-side image compression + helpers for serving smaller image variants
+ * via Supabase Storage's render endpoint.
  */
 
 interface CompressOptions {
   maxWidth?: number;
   maxHeight?: number;
   quality?: number;
+  /** Re-encode any file larger than this (in MB). */
   maxSizeMB?: number;
+}
+
+// Detect WebP encoding support once.
+let _webpSupport: boolean | null = null;
+function supportsWebp(): boolean {
+  if (_webpSupport !== null) return _webpSupport;
+  try {
+    const c = document.createElement("canvas");
+    c.width = 1;
+    c.height = 1;
+    _webpSupport = c.toDataURL("image/webp").startsWith("data:image/webp");
+  } catch {
+    _webpSupport = false;
+  }
+  return _webpSupport;
 }
 
 export async function compressImage(
@@ -15,18 +31,16 @@ export async function compressImage(
   options: CompressOptions = {}
 ): Promise<File> {
   const {
-    maxWidth = 1920,
-    maxHeight = 1920,
-    quality = 0.82,
-    maxSizeMB = 1,
+    maxWidth = 1600,
+    maxHeight = 1600,
+    quality = 0.72,
+    maxSizeMB = 0.4, // re-encode anything bigger than ~400 KB
   } = options;
 
-  // Skip if already small enough
-  if (file.size <= maxSizeMB * 1024 * 1024) {
-    return file;
-  }
+  if (!file.type.startsWith("image/")) return file;
+  if (file.size <= maxSizeMB * 1024 * 1024) return file;
 
-  return new Promise((resolve, reject) => {
+  return new Promise((resolve) => {
     const img = new Image();
     const url = URL.createObjectURL(file);
 
@@ -34,8 +48,6 @@ export async function compressImage(
       URL.revokeObjectURL(url);
 
       let { width, height } = img;
-
-      // Scale down if needed, preserving aspect ratio
       if (width > maxWidth || height > maxHeight) {
         const ratio = Math.min(maxWidth / width, maxHeight / height);
         width = Math.round(width * ratio);
@@ -45,14 +57,16 @@ export async function compressImage(
       const canvas = document.createElement("canvas");
       canvas.width = width;
       canvas.height = height;
-
       const ctx = canvas.getContext("2d");
       if (!ctx) {
         resolve(file);
         return;
       }
-
       ctx.drawImage(img, 0, 0, width, height);
+
+      const useWebp = supportsWebp() && file.type !== "image/png";
+      const outType = useWebp ? "image/webp" : file.type === "image/png" ? "image/png" : "image/jpeg";
+      const ext = useWebp ? "webp" : file.type === "image/png" ? "png" : "jpg";
 
       canvas.toBlob(
         (blob) => {
@@ -60,18 +74,22 @@ export async function compressImage(
             resolve(file);
             return;
           }
-          const ext = file.name.split(".").pop()?.toLowerCase();
-          const name = file.name.replace(/\.[^.]+$/, "") + (ext === "png" ? ".png" : ".jpg");
-          resolve(new File([blob], name, { type: blob.type }));
+          // Only swap if it actually got smaller.
+          if (blob.size >= file.size) {
+            resolve(file);
+            return;
+          }
+          const name = file.name.replace(/\.[^.]+$/, "") + "." + ext;
+          resolve(new File([blob], name, { type: outType }));
         },
-        file.type === "image/png" ? "image/png" : "image/jpeg",
+        outType,
         quality
       );
     };
 
     img.onerror = () => {
       URL.revokeObjectURL(url);
-      resolve(file); // Fall back to original on error
+      resolve(file);
     };
 
     img.src = url;
@@ -79,14 +97,42 @@ export async function compressImage(
 }
 
 /**
+ * Rewrite a Supabase public storage URL to use the on-the-fly image
+ * transformation endpoint, returning a smaller, faster-loading variant.
+ *
+ * Falls back to the original URL for non-Supabase or unrecognized inputs.
+ */
+export function getStorageThumb(
+  url: string | null | undefined,
+  opts: { width?: number; height?: number; quality?: number; resize?: "cover" | "contain" | "fill" } = {}
+): string {
+  if (!url) return "";
+  // Only transform Supabase public-object URLs.
+  // Pattern: https://<ref>.supabase.co/storage/v1/object/public/<bucket>/<path>
+  const marker = "/storage/v1/object/public/";
+  const idx = url.indexOf(marker);
+  if (idx === -1) return url;
+
+  const base = url.substring(0, idx);
+  const rest = url.substring(idx + marker.length);
+  const { width, height, quality = 70, resize = "cover" } = opts;
+
+  const params = new URLSearchParams();
+  if (width) params.set("width", String(width));
+  if (height) params.set("height", String(height));
+  params.set("quality", String(quality));
+  params.set("resize", resize);
+
+  return `${base}/storage/v1/render/image/public/${rest}?${params.toString()}`;
+}
+
+/**
  * Extract city and country from a location string.
- * Returns "City, Country" or original string if parsing fails.
  */
 export function formatLocationCityCountry(location: string | null): string {
   if (!location) return "";
   const parts = location.split(",").map((p) => p.trim());
   if (parts.length >= 2) {
-    // Take first part as city, last part as country
     return `${parts[0]}, ${parts[parts.length - 1]}`;
   }
   return location;

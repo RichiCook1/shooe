@@ -6,7 +6,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { formatLocationCityCountry } from "@/lib/imageCompression";
+import { formatLocationCityCountry, getStorageThumb } from "@/lib/imageCompression";
 
 const CATEGORY_LABELS: Record<string, string> = {
   road: "Road",
@@ -122,10 +122,11 @@ const ReviewCard = ({ review, onClick, onShare }: ReviewCardProps) => {
       {images.length > 0 && (
         <div className="relative overflow-hidden" onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd}>
           <img
-            src={images[imgIdx]}
+            src={getStorageThumb(images[imgIdx], { width: 800, quality: 70, resize: "contain" }) || images[imgIdx]}
             alt={brandModel}
             className="w-full object-contain max-h-[400px]"
             loading="lazy"
+            decoding="async"
           />
           {images.length > 1 && (
             <>
@@ -166,7 +167,7 @@ const ReviewCard = ({ review, onClick, onShare }: ReviewCardProps) => {
             >
               <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center overflow-hidden shrink-0">
                 {avatar ? (
-                  <img src={avatar} alt="" className="w-full h-full object-cover" loading="lazy" />
+                  <img src={getStorageThumb(avatar, { width: 80, quality: 70 }) || avatar} alt="" className="w-full h-full object-cover" loading="lazy" decoding="async" />
                 ) : (
                   <span className="text-xs font-bold text-muted-foreground">{displayName[0]?.toUpperCase()}</span>
                 )}
