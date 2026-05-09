@@ -4,6 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import Navbar from "@/components/landing/Navbar";
 import { Badge } from "@/components/ui/badge";
 import { ArrowLeft } from "lucide-react";
+import { getStorageThumb } from "@/lib/imageCompression";
 
 const Brand = () => {
   const { brandId } = useParams<{ brandId: string }>();

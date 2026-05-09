@@ -8,6 +8,7 @@ import ReviewDetailModal from "@/components/ReviewDetailModal";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, Sparkles } from "lucide-react";
+import { getStorageThumb } from "@/lib/imageCompression";
 
 const Model = () => {
   const { modelId } = useParams<{ modelId: string }>();
@@ -99,7 +100,7 @@ const Model = () => {
         {/* Header */}
         <div className="flex flex-col md:flex-row gap-6 mb-8">
           {model.image_url && (
-            <img src={model.image_url} alt={model.name} className="w-full md:w-64 max-h-64 object-contain bg-muted rounded-lg" />
+            <img src={getStorageThumb(model.image_url, { width: 600, quality: 75, resize: "contain" }) || model.image_url} alt={model.name} className="w-full md:w-64 max-h-64 object-contain bg-muted rounded-lg" decoding="async" />
           )}
           <div className="flex-1">
             {model.brand?.id ? (
