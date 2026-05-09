@@ -15,6 +15,8 @@ export default function AdminCatalog() {
   const qc = useQueryClient();
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<"all" | "unverified" | "missing_image" | "pending" | "user_submitted">("all");
+  const [brandFilter, setBrandFilter] = useState<{ id: string; name: string } | null>(null);
+  const [tab, setTab] = useState("models");
 
   const { data: brands } = useQuery({
     queryKey: ["admin-brands", search],
@@ -27,7 +29,7 @@ export default function AdminCatalog() {
   });
 
   const { data: models } = useQuery({
-    queryKey: ["admin-models", search, filter],
+    queryKey: ["admin-models", search, filter, brandFilter?.id],
     queryFn: async () => {
       let q = supabase.from("models").select("*, brands(name)").order("created_at", { ascending: false });
       if (search) q = q.ilike("name", `%${search}%`);
@@ -35,10 +37,16 @@ export default function AdminCatalog() {
       if (filter === "missing_image") q = q.is("image_url", null);
       if (filter === "pending") q = q.eq("pending_review", true);
       if (filter === "user_submitted") q = q.eq("source", "user_submitted");
+      if (brandFilter) q = q.eq("brand_id", brandFilter.id);
       const { data } = await q.limit(300);
       return data ?? [];
     },
   });
+
+  const selectBrand = (b: { id: string; name: string }) => {
+    setBrandFilter(b);
+    setTab("models");
+  };
 
   const enrichOne = useMutation({
     mutationFn: async (id: string) => {
@@ -104,7 +112,17 @@ export default function AdminCatalog() {
         </Select>
       </div>
 
-      <Tabs defaultValue="models">
+      {brandFilter && (
+        <div className="flex items-center gap-2 text-sm">
+          <span className="text-muted-foreground">Filtering by brand:</span>
+          <Badge className="rounded-none gap-1">
+            {brandFilter.name}
+            <button onClick={() => setBrandFilter(null)} className="ml-1 hover:opacity-70">×</button>
+          </Badge>
+        </div>
+      )}
+
+      <Tabs value={tab} onValueChange={setTab}>
         <TabsList className="rounded-none">
           <TabsTrigger value="models" className="rounded-none">Models ({models?.length ?? 0})</TabsTrigger>
           <TabsTrigger value="brands" className="rounded-none">Brands ({brands?.length ?? 0})</TabsTrigger>
@@ -136,7 +154,16 @@ export default function AdminCatalog() {
                       )}
                     </TableCell>
                     <TableCell className="font-medium">{m.name}</TableCell>
-                    <TableCell>{m.brands?.name ?? "—"}</TableCell>
+                    <TableCell>
+                      {m.brands?.name ? (
+                        <button
+                          onClick={() => selectBrand({ id: m.brand_id, name: m.brands.name })}
+                          className="hover:underline text-left"
+                        >
+                          {m.brands.name}
+                        </button>
+                      ) : "—"}
+                    </TableCell>
                     <TableCell>{m.category}</TableCell>
                     <TableCell>
                       {m.verified ? <Badge className="rounded-none">Verified</Badge> :
@@ -176,11 +203,11 @@ export default function AdminCatalog() {
               </TableHeader>
               <TableBody>
                 {brands?.map((b: any) => (
-                  <TableRow key={b.id}>
-                    <TableCell className="font-medium">{b.name}</TableCell>
+                  <TableRow key={b.id} className="cursor-pointer" onClick={() => selectBrand({ id: b.id, name: b.name })}>
+                    <TableCell className="font-medium hover:underline">{b.name}</TableCell>
                     <TableCell>{b.country ?? "—"}</TableCell>
                     <TableCell className="truncate max-w-xs">{b.website ?? "—"}</TableCell>
-                    <TableCell className="text-right">
+                    <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
                       <Button size="sm" variant="ghost" onClick={() => { if (confirm(`Delete ${b.name}?`)) deleteBrand.mutate(b.id); }} className="h-8 text-destructive">
                         <Trash2 className="w-4 h-4" />
                       </Button>
