@@ -8,8 +8,10 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { Trash2, CheckCircle2, RefreshCw, Sparkles, Image as ImageIcon } from "lucide-react";
+import { Trash2, CheckCircle2, RefreshCw, Sparkles, Image as ImageIcon, Plus } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
 
 export default function AdminCatalog() {
   const qc = useQueryClient();
@@ -17,6 +19,14 @@ export default function AdminCatalog() {
   const [filter, setFilter] = useState<"all" | "unverified" | "missing_image" | "pending" | "user_submitted">("all");
   const [brandFilter, setBrandFilter] = useState<{ id: string; name: string } | null>(null);
   const [tab, setTab] = useState("models");
+
+  // Add brand dialog
+  const [brandOpen, setBrandOpen] = useState(false);
+  const [newBrand, setNewBrand] = useState({ name: "", country: "", website: "" });
+
+  // Add model dialog
+  const [modelOpen, setModelOpen] = useState(false);
+  const [newModel, setNewModel] = useState({ name: "", brand_id: "", category: "road", image_url: "" });
 
   const { data: brands } = useQuery({
     queryKey: ["admin-brands", search],
@@ -74,6 +84,49 @@ export default function AdminCatalog() {
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["admin-brands"] }); toast.success("Brand deleted"); },
   });
 
+  const addBrand = useMutation({
+    mutationFn: async () => {
+      if (!newBrand.name.trim()) throw new Error("Brand name required");
+      const { error } = await supabase.from("brands").insert({
+        name: newBrand.name.trim(),
+        country: newBrand.country.trim() || null,
+        website: newBrand.website.trim() || null,
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-brands"] });
+      toast.success("Brand added");
+      setBrandOpen(false);
+      setNewBrand({ name: "", country: "", website: "" });
+    },
+    onError: (e: any) => toast.error(e.message),
+  });
+
+  const addModel = useMutation({
+    mutationFn: async () => {
+      if (!newModel.name.trim()) throw new Error("Model name required");
+      if (!newModel.brand_id) throw new Error("Brand required");
+      const { error } = await supabase.from("models").insert({
+        name: newModel.name.trim(),
+        brand_id: newModel.brand_id,
+        category: newModel.category as any,
+        image_url: newModel.image_url.trim() || null,
+        verified: true,
+        pending_review: false,
+        source: "admin",
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-models"] });
+      toast.success("Model added");
+      setModelOpen(false);
+      setNewModel({ name: "", brand_id: "", category: "road", image_url: "" });
+    },
+    onError: (e: any) => toast.error(e.message),
+  });
+
   const runSeed = async () => {
     toast.info("Starting catalog seed...");
     const { error } = await supabase.functions.invoke("seed-brand-catalog", {});
@@ -92,7 +145,80 @@ export default function AdminCatalog() {
     <div className="space-y-6">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <h1 className="text-3xl font-display tracking-wider uppercase">Catalog</h1>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
+          <Dialog open={modelOpen} onOpenChange={setModelOpen}>
+            <DialogTrigger asChild>
+              <Button className="rounded-none gap-2"><Plus className="w-4 h-4" /> Add Model</Button>
+            </DialogTrigger>
+            <DialogContent className="rounded-none">
+              <DialogHeader><DialogTitle>Add Model</DialogTitle></DialogHeader>
+              <div className="space-y-3">
+                <div>
+                  <Label>Brand</Label>
+                  <Select value={newModel.brand_id} onValueChange={(v) => setNewModel({ ...newModel, brand_id: v })}>
+                    <SelectTrigger className="rounded-none"><SelectValue placeholder="Select brand" /></SelectTrigger>
+                    <SelectContent>
+                      {brands?.map((b: any) => (
+                        <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label>Name</Label>
+                  <Input className="rounded-none" value={newModel.name} onChange={(e) => setNewModel({ ...newModel, name: e.target.value })} placeholder="e.g. Pegasus 41" />
+                </div>
+                <div>
+                  <Label>Category</Label>
+                  <Select value={newModel.category} onValueChange={(v) => setNewModel({ ...newModel, category: v })}>
+                    <SelectTrigger className="rounded-none"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="road">Road</SelectItem>
+                      <SelectItem value="trail">Trail</SelectItem>
+                      <SelectItem value="racing">Racing</SelectItem>
+                      <SelectItem value="training">Training</SelectItem>
+                      <SelectItem value="hiking">Hiking</SelectItem>
+                      <SelectItem value="lifestyle">Lifestyle</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label>Image URL (optional)</Label>
+                  <Input className="rounded-none" value={newModel.image_url} onChange={(e) => setNewModel({ ...newModel, image_url: e.target.value })} placeholder="https://..." />
+                </div>
+              </div>
+              <DialogFooter>
+                <Button onClick={() => addModel.mutate()} disabled={addModel.isPending} className="rounded-none">Add</Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
+          <Dialog open={brandOpen} onOpenChange={setBrandOpen}>
+            <DialogTrigger asChild>
+              <Button variant="outline" className="rounded-none gap-2"><Plus className="w-4 h-4" /> Add Brand</Button>
+            </DialogTrigger>
+            <DialogContent className="rounded-none">
+              <DialogHeader><DialogTitle>Add Brand</DialogTitle></DialogHeader>
+              <div className="space-y-3">
+                <div>
+                  <Label>Name</Label>
+                  <Input className="rounded-none" value={newBrand.name} onChange={(e) => setNewBrand({ ...newBrand, name: e.target.value })} placeholder="e.g. On Running" />
+                </div>
+                <div>
+                  <Label>Country (optional)</Label>
+                  <Input className="rounded-none" value={newBrand.country} onChange={(e) => setNewBrand({ ...newBrand, country: e.target.value })} />
+                </div>
+                <div>
+                  <Label>Website (optional)</Label>
+                  <Input className="rounded-none" value={newBrand.website} onChange={(e) => setNewBrand({ ...newBrand, website: e.target.value })} placeholder="https://..." />
+                </div>
+              </div>
+              <DialogFooter>
+                <Button onClick={() => addBrand.mutate()} disabled={addBrand.isPending} className="rounded-none">Add</Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
           <Button variant="outline" onClick={runSeed} className="rounded-none gap-2"><Sparkles className="w-4 h-4" /> Seed Brands</Button>
           <Button variant="outline" onClick={runDiscover} className="rounded-none gap-2"><RefreshCw className="w-4 h-4" /> Discover</Button>
         </div>
