@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { Slider } from "@/components/ui/slider";
 import LocationAutocomplete from "@/components/LocationAutocomplete";
+import { Combobox } from "@/components/Combobox";
 import { ArrowLeft, ArrowRight, Camera, Check, MapPin, Mountain, Navigation, X } from "lucide-react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
@@ -445,22 +446,39 @@ const Review = () => {
                 <>
                   <div>
                     <label className="text-sm font-medium mb-2 block">Brand</label>
-                    <Select value={selectedBrand} onValueChange={(v) => { setSelectedBrand(v); setSelectedModel(""); }}>
-                      <SelectTrigger><SelectValue placeholder="Select brand" /></SelectTrigger>
-                      <SelectContent>
-                        {brands?.map((b) => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
+                    <Combobox
+                      items={(brands ?? []).map((b) => ({ value: b.id, label: b.name }))}
+                      value={selectedBrand}
+                      onChange={(v) => { setSelectedBrand(v); setSelectedModel(""); setUseCustomModel(false); }}
+                      onCustomSelect={(text) => {
+                        setUseCustomBrand(true);
+                        setCustomBrand(text);
+                        setSelectedBrand("");
+                        setSelectedModel("");
+                      }}
+                      placeholder="Select brand"
+                      searchPlaceholder="Type a brand..."
+                      allowCustom
+                      customLabel={(t) => `Use "${t}" as new brand`}
+                    />
                   </div>
                   {selectedBrand && !useCustomModel ? (
                     <div>
                       <label className="text-sm font-medium mb-2 block">Model</label>
-                      <Select value={selectedModel} onValueChange={setSelectedModel}>
-                        <SelectTrigger><SelectValue placeholder="Select model" /></SelectTrigger>
-                        <SelectContent>
-                          {models?.map((m) => <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>)}
-                        </SelectContent>
-                      </Select>
+                      <Combobox
+                        items={(models ?? []).map((m) => ({ value: m.id, label: m.name }))}
+                        value={selectedModel}
+                        onChange={setSelectedModel}
+                        onCustomSelect={(text) => {
+                          setUseCustomModel(true);
+                          setCustomModel(text);
+                          setSelectedModel("");
+                        }}
+                        placeholder="Select model"
+                        searchPlaceholder="Type a model..."
+                        allowCustom
+                        customLabel={(t) => `Use "${t}" as new model`}
+                      />
                     </div>
                   ) : selectedBrand && useCustomModel ? (
                     <div>
