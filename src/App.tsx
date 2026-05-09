@@ -55,31 +55,33 @@ const App = () => (
       <Sonner />
       <BrowserRouter>
         <AuthProvider>
-          <Routes>
-            <Route path="/" element={<Index />} />
-            <Route path="/review" element={<Review />} />
-            <Route path="/login" element={<Login />} />
-            <Route path="/feed" element={<Feed />} />
-            <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
-            <Route path="/profile/:userId" element={<Profile />} />
-            <Route path="/edit-profile" element={<ProtectedRoute><EditProfile /></ProtectedRoute>} />
-            <Route path="/messages" element={<ProtectedRoute><Messages /></ProtectedRoute>} />
-            <Route path="/saved" element={<ProtectedRoute><SavedReviews /></ProtectedRoute>} />
-            <Route path="/sherpa" element={<Sherpa />} />
-            <Route path="/model/:modelId" element={<Model />} />
-            <Route path="/brand/:brandId" element={<Brand />} />
-            <Route path="/admin" element={<AdminRoute><AdminLayout /></AdminRoute>}>
-              <Route index element={<AdminOverview />} />
-              <Route path="catalog" element={<AdminCatalog />} />
-              <Route path="catalog/health" element={<AdminCatalogHealth />} />
-              <Route path="queue" element={<AdminQueue />} />
-              <Route path="fields" element={<AdminFields />} />
-              <Route path="users" element={<AdminUsers />} />
-              <Route path="moderation" element={<AdminModeration />} />
-              <Route path="analytics" element={<AdminAnalytics />} />
-            </Route>
-            <Route path="*" element={<NotFound />} />
-          </Routes>
+          <Suspense fallback={<RouteFallback />}>
+            <Routes>
+              <Route path="/" element={<Index />} />
+              <Route path="/review" element={<Review />} />
+              <Route path="/login" element={<Login />} />
+              <Route path="/feed" element={<Feed />} />
+              <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
+              <Route path="/profile/:userId" element={<Profile />} />
+              <Route path="/edit-profile" element={<ProtectedRoute><EditProfile /></ProtectedRoute>} />
+              <Route path="/messages" element={<ProtectedRoute><Messages /></ProtectedRoute>} />
+              <Route path="/saved" element={<ProtectedRoute><SavedReviews /></ProtectedRoute>} />
+              <Route path="/sherpa" element={<Sherpa />} />
+              <Route path="/model/:modelId" element={<Model />} />
+              <Route path="/brand/:brandId" element={<Brand />} />
+              <Route path="/admin" element={<AdminRoute><AdminLayout /></AdminRoute>}>
+                <Route index element={<AdminOverview />} />
+                <Route path="catalog" element={<AdminCatalog />} />
+                <Route path="catalog/health" element={<AdminCatalogHealth />} />
+                <Route path="queue" element={<AdminQueue />} />
+                <Route path="fields" element={<AdminFields />} />
+                <Route path="users" element={<AdminUsers />} />
+                <Route path="moderation" element={<AdminModeration />} />
+                <Route path="analytics" element={<AdminAnalytics />} />
+              </Route>
+              <Route path="*" element={<NotFound />} />
+            </Routes>
+          </Suspense>
         </AuthProvider>
       </BrowserRouter>
     </TooltipProvider>
