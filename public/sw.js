@@ -1,4 +1,5 @@
-const CACHE_NAME = 'sherpa-v3';
+const CACHE_NAME = 'sherpa-v4';
+const IMG_CACHE = 'sherpa-img-v1';
 const CACHE_PREFIX = 'sherpa-';
 
 self.addEventListener('install', (event) => {
@@ -8,7 +9,11 @@ self.addEventListener('install', (event) => {
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys().then((keys) =>
-      Promise.all(keys.filter((k) => k.startsWith(CACHE_PREFIX) && k !== CACHE_NAME).map((k) => caches.delete(k)))
+      Promise.all(
+        keys
+          .filter((k) => k.startsWith(CACHE_PREFIX) && k !== CACHE_NAME && k !== IMG_CACHE)
+          .map((k) => caches.delete(k))
+      )
     )
   );
   self.clients.claim();
@@ -16,35 +21,62 @@ self.addEventListener('activate', (event) => {
 
 self.addEventListener('fetch', (event) => {
   const { request } = event;
+  if (request.method !== 'GET') return;
   const url = new URL(request.url);
 
-  // Skip non-GET and API/supabase/oauth requests
+  // Skip API/auth/oauth requests entirely
   if (
-    request.method !== 'GET' ||
-    url.origin !== self.location.origin ||
     request.url.includes('/rest/') ||
     request.url.includes('/auth/') ||
-    request.url.includes('/~oauth')
+    request.url.includes('/~oauth') ||
+    request.url.includes('/functions/v1/')
   ) {
     return;
   }
+
+  // Cache images aggressively (cache-first), including cross-origin
+  // (Supabase storage). This is the biggest perf win on repeat visits.
+  const isImage =
+    request.destination === 'image' ||
+    /\.(png|jpe?g|webp|gif|avif|svg)(\?|$)/i.test(url.pathname) ||
+    url.pathname.includes('/storage/v1/object/public/') ||
+    url.pathname.includes('/storage/v1/render/image/');
+
+  if (isImage) {
+    event.respondWith(
+      caches.open(IMG_CACHE).then(async (cache) => {
+        const cached = await cache.match(request);
+        if (cached) {
+          // Refresh in background
+          fetch(request).then((res) => { if (res && res.ok) cache.put(request, res.clone()); }).catch(() => {});
+          return cached;
+        }
+        try {
+          const res = await fetch(request);
+          if (res && res.ok) cache.put(request, res.clone());
+          return res;
+        } catch (e) {
+          return cached || Response.error();
+        }
+      })
+    );
+    return;
+  }
+
+  if (url.origin !== self.location.origin) return;
 
   const isViteDevAsset =
     url.pathname.startsWith('/@vite') ||
     url.pathname.startsWith('/src/') ||
     url.pathname.startsWith('/node_modules/') ||
     url.pathname.includes('/.vite/');
-
   const isRuntimeCode = ['script', 'style', 'worker'].includes(request.destination);
-
-  if (isViteDevAsset || isRuntimeCode) {
-    return;
-  }
+  if (isViteDevAsset || isRuntimeCode) return;
 
   event.respondWith(
     fetch(request)
       .then((response) => {
-        if (response.ok && response.type === 'basic' && ['image', 'font'].includes(request.destination)) {
+        if (response.ok && response.type === 'basic' && request.destination === 'font') {
           const clone = response.clone();
           caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
         }

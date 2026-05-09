@@ -30,7 +30,7 @@ const Feed = () => {
       if (sort === "recent") query = query.order("created_at", { ascending: false });
       else if (sort === "rating") query = query.order("rating", { ascending: false });
       else if (sort === "popular") query = query.order("created_at", { ascending: false }); // will sort by likes client-side
-      const { data, error } = await query.limit(50);
+      const { data, error } = await query.limit(20);
       if (error) return [];
       let filtered = data ?? [];
       if (brand !== "all") filtered = filtered.filter((r: any) => r.model?.brand_id === brand);
