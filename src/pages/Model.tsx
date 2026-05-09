@@ -102,7 +102,13 @@ const Model = () => {
             <img src={model.image_url} alt={model.name} className="w-full md:w-64 max-h-64 object-contain bg-muted rounded-lg" />
           )}
           <div className="flex-1">
-            <p className="text-sm text-muted-foreground uppercase tracking-wide">{model.brand?.name}</p>
+            {model.brand?.id ? (
+              <Link to={`/brand/${model.brand.id}`} className="text-sm text-muted-foreground uppercase tracking-wide hover:text-foreground">
+                {model.brand.name}
+              </Link>
+            ) : (
+              <p className="text-sm text-muted-foreground uppercase tracking-wide">{model.brand?.name}</p>
+            )}
             <h1 className="text-4xl font-display font-bold mt-1 mb-3">{model.name}</h1>
             <div className="flex flex-wrap gap-2 mb-4">
               {model.category && <Badge variant="outline" className="capitalize">{String(model.category).replace(/_/g, " ")}</Badge>}
