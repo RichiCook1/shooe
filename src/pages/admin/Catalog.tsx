@@ -13,12 +13,16 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 
+const PAGE_SIZE = 50;
+
 export default function AdminCatalog() {
   const qc = useQueryClient();
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<"all" | "unverified" | "missing_image" | "pending" | "user_submitted">("all");
   const [brandFilter, setBrandFilter] = useState<{ id: string; name: string } | null>(null);
   const [tab, setTab] = useState("models");
+  const [modelsPage, setModelsPage] = useState(0);
+  const [brandsPage, setBrandsPage] = useState(0);
 
   // Add brand dialog
   const [brandOpen, setBrandOpen] = useState(false);
@@ -28,30 +32,45 @@ export default function AdminCatalog() {
   const [modelOpen, setModelOpen] = useState(false);
   const [newModel, setNewModel] = useState({ name: "", brand_id: "", category: "road", image_url: "" });
 
-  const { data: brands } = useQuery({
-    queryKey: ["admin-brands", search],
+  const { data: brandsResult } = useQuery({
+    queryKey: ["admin-brands", search, brandsPage],
     queryFn: async () => {
-      let q = supabase.from("brands").select("*").order("name");
+      let q = supabase.from("brands").select("*", { count: "exact" }).order("name");
       if (search) q = q.ilike("name", `%${search}%`);
-      const { data } = await q.limit(200);
+      const { data, count } = await q.range(brandsPage * PAGE_SIZE, brandsPage * PAGE_SIZE + PAGE_SIZE - 1);
+      return { rows: data ?? [], count: count ?? 0 };
+    },
+  });
+  const brands = brandsResult?.rows ?? [];
+  const brandsCount = brandsResult?.count ?? 0;
+
+  // Unpaginated brands list for the Add Model dropdown
+  const { data: allBrands } = useQuery({
+    queryKey: ["admin-all-brands"],
+    queryFn: async () => {
+      const { data } = await supabase.from("brands").select("id, name").order("name").limit(1000);
       return data ?? [];
     },
   });
 
-  const { data: models } = useQuery({
-    queryKey: ["admin-models", search, filter, brandFilter?.id],
+  const { data: modelsResult } = useQuery({
+    queryKey: ["admin-models", search, filter, brandFilter?.id, modelsPage],
     queryFn: async () => {
-      let q = supabase.from("models").select("*, brands(name)").order("created_at", { ascending: false });
+      let q = supabase.from("models").select("*, brands(name)", { count: "exact" }).order("created_at", { ascending: false });
       if (search) q = q.ilike("name", `%${search}%`);
       if (filter === "unverified") q = q.eq("verified", false);
       if (filter === "missing_image") q = q.is("image_url", null);
       if (filter === "pending") q = q.eq("pending_review", true);
       if (filter === "user_submitted") q = q.eq("source", "user_submitted");
       if (brandFilter) q = q.eq("brand_id", brandFilter.id);
-      const { data } = await q.limit(300);
-      return data ?? [];
+      const { data, count } = await q.range(modelsPage * PAGE_SIZE, modelsPage * PAGE_SIZE + PAGE_SIZE - 1);
+      return { rows: data ?? [], count: count ?? 0 };
     },
   });
+  const models = modelsResult?.rows ?? [];
+  const modelsCount = modelsResult?.count ?? 0;
+  const modelsTotalPages = Math.max(1, Math.ceil(modelsCount / PAGE_SIZE));
+  const brandsTotalPages = Math.max(1, Math.ceil(brandsCount / PAGE_SIZE));
 
   const selectBrand = (b: { id: string; name: string }) => {
     setBrandFilter(b);
@@ -158,7 +177,7 @@ export default function AdminCatalog() {
                   <Select value={newModel.brand_id} onValueChange={(v) => setNewModel({ ...newModel, brand_id: v })}>
                     <SelectTrigger className="rounded-none"><SelectValue placeholder="Select brand" /></SelectTrigger>
                     <SelectContent>
-                      {brands?.map((b: any) => (
+                      {allBrands?.map((b: any) => (
                         <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>
                       ))}
                     </SelectContent>
@@ -225,8 +244,8 @@ export default function AdminCatalog() {
       </div>
 
       <div className="flex flex-wrap gap-2 items-center">
-        <Input placeholder="Search models or brands..." value={search} onChange={(e) => setSearch(e.target.value)} className="max-w-md rounded-none" />
-        <Select value={filter} onValueChange={(v: any) => setFilter(v)}>
+        <Input placeholder="Search models or brands..." value={search} onChange={(e) => { setSearch(e.target.value); setModelsPage(0); setBrandsPage(0); }} className="max-w-md rounded-none" />
+        <Select value={filter} onValueChange={(v: any) => { setFilter(v); setModelsPage(0); }}>
           <SelectTrigger className="w-48 rounded-none"><SelectValue /></SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All models</SelectItem>
@@ -250,8 +269,8 @@ export default function AdminCatalog() {
 
       <Tabs value={tab} onValueChange={setTab}>
         <TabsList className="rounded-none">
-          <TabsTrigger value="models" className="rounded-none">Models ({models?.length ?? 0})</TabsTrigger>
-          <TabsTrigger value="brands" className="rounded-none">Brands ({brands?.length ?? 0})</TabsTrigger>
+          <TabsTrigger value="models" className="rounded-none">Models ({modelsCount})</TabsTrigger>
+          <TabsTrigger value="brands" className="rounded-none">Brands ({brandsCount})</TabsTrigger>
         </TabsList>
 
         <TabsContent value="models">
@@ -314,6 +333,16 @@ export default function AdminCatalog() {
               </TableBody>
             </Table>
           </Card>
+          <div className="flex items-center justify-between mt-3 text-sm">
+            <span className="text-muted-foreground">
+              {modelsCount === 0 ? "No results" : `Showing ${modelsPage * PAGE_SIZE + 1}–${Math.min((modelsPage + 1) * PAGE_SIZE, modelsCount)} of ${modelsCount}`}
+            </span>
+            <div className="flex gap-2 items-center">
+              <Button variant="outline" size="sm" className="rounded-none" disabled={modelsPage === 0} onClick={() => setModelsPage(p => Math.max(0, p - 1))}>Prev</Button>
+              <span className="text-muted-foreground">Page {modelsPage + 1} / {modelsTotalPages}</span>
+              <Button variant="outline" size="sm" className="rounded-none" disabled={modelsPage + 1 >= modelsTotalPages} onClick={() => setModelsPage(p => p + 1)}>Next</Button>
+            </div>
+          </div>
         </TabsContent>
 
         <TabsContent value="brands">
@@ -343,6 +372,16 @@ export default function AdminCatalog() {
               </TableBody>
             </Table>
           </Card>
+          <div className="flex items-center justify-between mt-3 text-sm">
+            <span className="text-muted-foreground">
+              {brandsCount === 0 ? "No results" : `Showing ${brandsPage * PAGE_SIZE + 1}–${Math.min((brandsPage + 1) * PAGE_SIZE, brandsCount)} of ${brandsCount}`}
+            </span>
+            <div className="flex gap-2 items-center">
+              <Button variant="outline" size="sm" className="rounded-none" disabled={brandsPage === 0} onClick={() => setBrandsPage(p => Math.max(0, p - 1))}>Prev</Button>
+              <span className="text-muted-foreground">Page {brandsPage + 1} / {brandsTotalPages}</span>
+              <Button variant="outline" size="sm" className="rounded-none" disabled={brandsPage + 1 >= brandsTotalPages} onClick={() => setBrandsPage(p => p + 1)}>Next</Button>
+            </div>
+          </div>
         </TabsContent>
       </Tabs>
     </div>
