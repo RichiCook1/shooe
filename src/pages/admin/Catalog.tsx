@@ -269,8 +269,8 @@ export default function AdminCatalog() {
 
       <Tabs value={tab} onValueChange={setTab}>
         <TabsList className="rounded-none">
-          <TabsTrigger value="models" className="rounded-none">Models ({models?.length ?? 0})</TabsTrigger>
-          <TabsTrigger value="brands" className="rounded-none">Brands ({brands?.length ?? 0})</TabsTrigger>
+          <TabsTrigger value="models" className="rounded-none">Models ({modelsCount})</TabsTrigger>
+          <TabsTrigger value="brands" className="rounded-none">Brands ({brandsCount})</TabsTrigger>
         </TabsList>
 
         <TabsContent value="models">
