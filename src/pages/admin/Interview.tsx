@@ -3,6 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Slider } from "@/components/ui/slider";
 import { AudioRecorder } from "@/components/admin/AudioRecorder";
 import { compressImage } from "@/lib/imageCompression";
 import { Camera, Check, Loader2, X, Send, AlertCircle, QrCode } from "lucide-react";
@@ -308,6 +309,37 @@ export default function AdminInterview() {
             <input type="file" accept="image/*" capture="environment" className="hidden" onChange={handlePhoto} />
           </label>
         )}
+      </Card>
+
+      {/* Optional rating */}
+      <Card className="p-6 rounded-none border-border space-y-4">
+        <div className="flex items-center justify-between">
+          <h2 className="text-sm font-display uppercase tracking-wider text-muted-foreground">
+            3. Rating (optional)
+          </h2>
+          {rating !== null && (
+            <button
+              type="button"
+              onClick={() => setRating(null)}
+              className="text-xs text-muted-foreground underline"
+            >
+              Clear
+            </button>
+          )}
+        </div>
+        <div className="flex items-baseline gap-2">
+          <span className="text-4xl font-display tabular-nums">
+            {rating === null ? "—" : rating.toFixed(1)}
+          </span>
+          <span className="text-sm text-muted-foreground">/ 10</span>
+        </div>
+        <Slider
+          min={0}
+          max={10}
+          step={0.5}
+          value={[rating ?? 0]}
+          onValueChange={(v) => setRating(v[0])}
+        />
       </Card>
 
       {/* Submit */}
