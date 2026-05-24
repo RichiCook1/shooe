@@ -63,57 +63,79 @@ async function processInterview(audioBlob: Blob | null, audioMime: string, photo
     identifyPromise,
   ]);
 
-  // Resolve model id
+  // Resolve model id — fall back to "Unidentified" placeholder so the review is never lost
   let finalModelId: string | null = idData?.modelMatch?.id ?? null;
+  let needsIdentification = false;
 
   if (!finalModelId) {
     const brandName: string = idData?.brandMatch?.name ?? idData?.brand ?? "";
     const modelName: string = idData?.model ?? "";
-    if (!brandName || !modelName) {
-      throw new Error("Could not identify shoe brand/model from photo");
-    }
-    try {
-      const { data: result, error: vErr } = await supabase.functions.invoke("validate-shoe-name", {
-        body: {
-          brand: brandName,
-          model: modelName,
-          brandId: idData?.brandMatch?.id,
-        },
-      });
-      if (vErr || !result?.modelId) throw vErr ?? new Error("validation failed");
-      finalModelId = result.modelId;
-    } catch {
-      let bId: string | null = idData?.brandMatch?.id ?? null;
-      if (!bId) {
-        const { data: existing } = await supabase.from("brands").select("id").ilike("name", brandName).maybeSingle();
-        if (existing) bId = existing.id;
-        else {
-          const { data: nb } = await supabase.from("brands").insert({ name: brandName }).select().single();
-          bId = nb?.id ?? null;
+
+    if (brandName && modelName) {
+      try {
+        const { data: result, error: vErr } = await supabase.functions.invoke("validate-shoe-name", {
+          body: { brand: brandName, model: modelName, brandId: idData?.brandMatch?.id },
+        });
+        if (vErr || !result?.modelId) throw vErr ?? new Error("validation failed");
+        finalModelId = result.modelId;
+      } catch {
+        let bId: string | null = idData?.brandMatch?.id ?? null;
+        if (!bId) {
+          const { data: existing } = await supabase.from("brands").select("id").ilike("name", brandName).maybeSingle();
+          if (existing) bId = existing.id;
+          else {
+            const { data: nb } = await supabase.from("brands").insert({ name: brandName }).select().single();
+            bId = nb?.id ?? null;
+          }
+        }
+        if (bId) {
+          const { data: existingM } = await supabase.from("models").select("id").eq("brand_id", bId).ilike("name", modelName).maybeSingle();
+          if (existingM) finalModelId = existingM.id;
+          else {
+            const { data: nm } = await supabase.from("models").insert({ name: modelName, brand_id: bId, pending_review: true }).select().single();
+            finalModelId = nm?.id ?? null;
+          }
         }
       }
-      if (!bId) throw new Error("Failed to resolve brand");
-      const { data: existingM } = await supabase.from("models").select("id").eq("brand_id", bId).ilike("name", modelName).maybeSingle();
-      if (existingM) finalModelId = existingM.id;
-      else {
-        const { data: nm } = await supabase.from("models").insert({ name: modelName, brand_id: bId, pending_review: true }).select().single();
-        finalModelId = nm?.id ?? null;
-      }
+    }
+  }
+
+  // Last-resort fallback: attach to an "Unidentified" placeholder model so the draft is saved
+  if (!finalModelId) {
+    needsIdentification = true;
+    const { data: unkBrand } = await supabase.from("brands").select("id").ilike("name", "Unknown").maybeSingle();
+    let unkBrandId = unkBrand?.id ?? null;
+    if (!unkBrandId) {
+      const { data: nb } = await supabase.from("brands").insert({ name: "Unknown" }).select().single();
+      unkBrandId = nb?.id ?? null;
+    }
+    if (!unkBrandId) throw new Error("Could not create fallback brand");
+    const { data: unkModel } = await supabase
+      .from("models").select("id").eq("brand_id", unkBrandId).ilike("name", "Unidentified (needs ID)").maybeSingle();
+    if (unkModel) finalModelId = unkModel.id;
+    else {
+      const { data: nm } = await supabase
+        .from("models")
+        .insert({ name: "Unidentified (needs ID)", brand_id: unkBrandId, pending_review: true })
+        .select().single();
+      finalModelId = nm?.id ?? null;
     }
   }
 
   if (!finalModelId) throw new Error("Could not resolve shoe model");
 
   const guestSessionId = `interview:${crypto.randomUUID()}`;
+  const noteSuffix = needsIdentification ? "\n\n[NEEDS SHOE IDENTIFICATION]" : "";
   const { error: rErr } = await supabase.from("reviews").insert({
     model_id: finalModelId,
-    content: transcript || null,
+    content: (transcript || "") + noteSuffix || null,
     media_urls: [photoUrl],
     is_guest: true,
     guest_session_id: guestSessionId,
     user_id: null,
   });
   if (rErr) throw rErr;
+  return { needsIdentification };
 }
 
 export default function AdminInterview() {
@@ -177,9 +199,13 @@ export default function AdminInterview() {
 
     // Fire and forget
     processInterview(blob, mime, file)
-      .then(() => {
+      .then((res) => {
         setJobs((prev) => prev.map((j) => (j.id === id ? { ...j, status: "done" } : j)));
-        toast.success(`${label} saved`);
+        if (res?.needsIdentification) {
+          toast.warning(`${label} saved as draft — shoe needs identification`);
+        } else {
+          toast.success(`${label} saved`);
+        }
       })
       .catch((err: any) => {
         console.error(err);
