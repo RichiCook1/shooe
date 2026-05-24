@@ -2,11 +2,13 @@ import { useEffect, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { AudioRecorder } from "@/components/admin/AudioRecorder";
 import { compressImage } from "@/lib/imageCompression";
-import { Camera, Check, Loader2, X, Send, AlertCircle } from "lucide-react";
+import { Camera, Check, Loader2, X, Send, AlertCircle, QrCode } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
+import { QRCodeSVG } from "qrcode.react";
 
 const blobToBase64 = (b: Blob) =>
   new Promise<string>((res, rej) => {
