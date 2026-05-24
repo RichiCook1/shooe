@@ -1,6 +1,9 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Mic } from "lucide-react";
+import { Link } from "react-router-dom";
 
 const Stat = ({ label, value }: { label: string; value: number | string }) => (
   <Card className="p-5 rounded-none border-border">
@@ -34,7 +37,14 @@ export default function AdminOverview() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-3xl font-display tracking-wider uppercase">Overview</h1>
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <h1 className="text-3xl font-display tracking-wider uppercase">Overview</h1>
+        <Button asChild size="lg" className="rounded-none">
+          <Link to="/admin/interview">
+            <Mic className="h-4 w-4 mr-2" /> Start Interview
+          </Link>
+        </Button>
+      </div>
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
         <Stat label="Users" value={data?.users ?? "—"} />
         <Stat label="Reviews" value={data?.reviews ?? "—"} />
