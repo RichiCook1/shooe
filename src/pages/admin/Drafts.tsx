@@ -34,12 +34,13 @@ export default function AdminDrafts() {
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState("");
   const [onlyNeedsId, setOnlyNeedsId] = useState(false);
+  const [editing, setEditing] = useState<DraftReviewLite | null>(null);
 
   const load = async () => {
     setLoading(true);
     const { data, error } = await supabase
       .from("reviews")
-      .select("id, content, media_urls, created_at, guest_session_id, model_id")
+      .select("id, content, media_urls, created_at, guest_session_id, model_id, rating, terrain, distance_km, location")
       .like("guest_session_id", "interview:%")
       .order("created_at", { ascending: false })
       .limit(200);
