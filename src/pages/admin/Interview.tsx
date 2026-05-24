@@ -27,7 +27,7 @@ interface Job {
   error?: string;
 }
 
-async function processInterview(audioBlob: Blob | null, audioMime: string, photo: File) {
+async function processInterview(audioBlob: Blob | null, audioMime: string, photo: File, rating: number | null) {
   // Upload photo
   const ext = photo.name.split(".").pop() || "jpg";
   const path = `interview/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
