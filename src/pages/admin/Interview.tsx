@@ -135,6 +135,7 @@ async function processInterview(audioBlob: Blob | null, audioMime: string, photo
     is_guest: true,
     guest_session_id: guestSessionId,
     user_id: null,
+    rating: rating,
   });
   if (rErr) throw rErr;
   return { needsIdentification };
@@ -148,6 +149,7 @@ export default function AdminInterview() {
   const [audioKey, setAudioKey] = useState(0); // remount recorder to reset
   const [photo, setPhoto] = useState<File | null>(null);
   const [photoPreview, setPhotoPreview] = useState<string>("");
+  const [rating, setRating] = useState<number | null>(null);
 
   const [jobs, setJobs] = useState<Job[]>([]);
   const jobsRef = useRef(jobs);
@@ -191,16 +193,18 @@ export default function AdminInterview() {
     const blob = audioBlob;
     const mime = audioMime;
     const file = photo;
+    const r = rating;
 
     setAudioBlob(null);
     setPhoto(null);
     setPhotoPreview("");
+    setRating(null);
     setAudioKey((k) => k + 1);
 
     toast.success("Submitted — processing in background");
 
     // Fire and forget
-    processInterview(blob, mime, file)
+    processInterview(blob, mime, file, r)
       .then((res) => {
         setJobs((prev) => prev.map((j) => (j.id === id ? { ...j, status: "done" } : j)));
         if (res?.needsIdentification) {
