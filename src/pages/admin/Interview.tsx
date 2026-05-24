@@ -124,7 +124,9 @@ async function processInterview(audioBlob: Blob | null, audioMime: string, photo
 
   if (!finalModelId) throw new Error("Could not resolve shoe model");
 
-  const guestSessionId = `interview:${crypto.randomUUID()}`;
+  const { data: authData } = await supabase.auth.getUser();
+  const adminId = authData?.user?.id || "anon";
+  const guestSessionId = `interview:${adminId}:${crypto.randomUUID()}`;
   const noteSuffix = needsIdentification ? "\n\n[NEEDS SHOE IDENTIFICATION]" : "";
   const { error: rErr } = await supabase.from("reviews").insert({
     model_id: finalModelId,
