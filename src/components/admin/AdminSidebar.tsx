@@ -10,6 +10,7 @@ import {
   BarChart3,
   ArrowLeft,
   Mic,
+  FileText,
 } from "lucide-react";
 import {
   Sidebar,
@@ -26,6 +27,7 @@ import {
 const items = [
   { title: "Overview", url: "/admin", icon: LayoutDashboard, end: true },
   { title: "Interview", url: "/admin/interview", icon: Mic },
+  { title: "Drafts", url: "/admin/drafts", icon: FileText },
   { title: "Catalog", url: "/admin/catalog", icon: Footprints, end: true },
   { title: "Catalog Health", url: "/admin/catalog/health", icon: Activity },
   { title: "Pending Queue", url: "/admin/queue", icon: Inbox },

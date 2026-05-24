@@ -24,6 +24,7 @@ const Brand = lazy(() => import("./pages/Brand"));
 const AdminLayout = lazy(() => import("./components/admin/AdminLayout"));
 const AdminOverview = lazy(() => import("./pages/admin/Overview"));
 const AdminInterview = lazy(() => import("./pages/admin/Interview"));
+const AdminDrafts = lazy(() => import("./pages/admin/Drafts"));
 const AdminCatalog = lazy(() => import("./pages/admin/Catalog"));
 const AdminCatalogHealth = lazy(() => import("./pages/admin/CatalogHealth"));
 const AdminQueue = lazy(() => import("./pages/admin/Queue"));
@@ -73,6 +74,7 @@ const App = () => (
               <Route path="/admin" element={<AdminRoute><AdminLayout /></AdminRoute>}>
                 <Route index element={<AdminOverview />} />
                 <Route path="interview" element={<AdminInterview />} />
+                <Route path="drafts" element={<AdminDrafts />} />
                 <Route path="catalog" element={<AdminCatalog />} />
                 <Route path="catalog/health" element={<AdminCatalogHealth />} />
                 <Route path="queue" element={<AdminQueue />} />
