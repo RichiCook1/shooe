@@ -177,7 +177,7 @@ export default function AdminCatalog() {
                   <Select value={newModel.brand_id} onValueChange={(v) => setNewModel({ ...newModel, brand_id: v })}>
                     <SelectTrigger className="rounded-none"><SelectValue placeholder="Select brand" /></SelectTrigger>
                     <SelectContent>
-                      {brands?.map((b: any) => (
+                      {allBrands?.map((b: any) => (
                         <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>
                       ))}
                     </SelectContent>
