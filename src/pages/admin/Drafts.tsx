@@ -17,6 +17,10 @@ interface DraftReview {
   created_at: string;
   guest_session_id: string | null;
   model_id: string;
+  rating: number | null;
+  terrain: "road" | "trail" | "mixed" | "track" | null;
+  distance_km: number | null;
+  location: string | null;
   models: {
     id: string;
     name: string;
