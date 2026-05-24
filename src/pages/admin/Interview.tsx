@@ -20,12 +20,19 @@ const blobToBase64 = (b: Blob) =>
   });
 
 type JobStatus = "processing" | "done" | "error";
+interface JobPayload {
+  blob: Blob | null;
+  mime: string;
+  file: File;
+  rating: number | null;
+}
 interface Job {
   id: string;
   startedAt: number;
   status: JobStatus;
   label: string;
   error?: string;
+  payload?: JobPayload;
 }
 
 async function processInterview(audioBlob: Blob | null, audioMime: string, photo: File, rating: number | null) {
