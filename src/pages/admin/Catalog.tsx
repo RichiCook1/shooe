@@ -244,8 +244,8 @@ export default function AdminCatalog() {
       </div>
 
       <div className="flex flex-wrap gap-2 items-center">
-        <Input placeholder="Search models or brands..." value={search} onChange={(e) => setSearch(e.target.value)} className="max-w-md rounded-none" />
-        <Select value={filter} onValueChange={(v: any) => setFilter(v)}>
+        <Input placeholder="Search models or brands..." value={search} onChange={(e) => { setSearch(e.target.value); setModelsPage(0); setBrandsPage(0); }} className="max-w-md rounded-none" />
+        <Select value={filter} onValueChange={(v: any) => { setFilter(v); setModelsPage(0); }}>
           <SelectTrigger className="w-48 rounded-none"><SelectValue /></SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All models</SelectItem>
