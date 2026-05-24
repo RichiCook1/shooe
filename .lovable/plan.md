@@ -1,75 +1,52 @@
+
 ## Goal
-The app feels slow mainly because of heavy images and inefficient data loading. Average uploaded review photo is **2.4 MB** (storage holds 205 MB across 86 files), the feed runs many small per-card queries, and the whole app loads as one JS bundle.
 
-## What we'll change
+Let admins capture quick in-person interviews at events: record the interviewee's voice, transcribe it, snap a photo of the shoe, auto-identify the shoe, and submit an **anonymous** review (not attributed to the admin).
 
-### 1. Smaller images (biggest win)
+## Flow
 
-**a. Compress harder on upload** — `src/lib/imageCompression.ts`
-- Lower max dimensions: 1600 → for photos shown at most ~800 px wide on screen
-- Lower JPEG quality: 0.82 → 0.72
-- Lower size threshold: always re-encode if > 400 KB (currently skips anything < 1 MB)
-- Output WebP when supported (much smaller than JPEG at same quality)
-- Use `createImageBitmap` instead of `<img>` for faster decode
+1. Admin Overview page gets a prominent "Start Interview" button → routes to `/admin/interview` (admin-only, mobile-first full-screen layout).
+2. Step 1 — Audio capture
+   - Big record button using `MediaRecorder` (webm/opus).
+   - Live timer, stop button, replay before sending.
+   - On stop → upload blob to new edge function `transcribe-interview` which forwards to Lovable AI Gateway (Gemini 2.5 Flash, multimodal audio input) and returns transcript text.
+   - Transcript shown in an editable textarea so admin can fix typos.
+3. Step 2 — Shoe photo
+   - Camera capture via `<input type="file" accept="image/*" capture="environment">` + preview.
+   - Compress with existing `imageCompression.ts`.
+   - Call existing `identify-shoe-from-image` function → pre-fill brand/model in the Combobox.
+   - Admin can correct/override (typeahead + add-new already supported).
+4. Step 3 — Confirm & submit
+   - Show: photo, suggested brand/model (editable), transcript (editable), optional rating slider + terrain + location.
+   - Submit creates a `reviews` row with `user_id = null`, `is_guest = true`, `guest_session_id = 'interview:<uuid>'`, `content = transcript`, `media_urls = [shoePhotoUrl]`.
+   - Existing "Anyone can create reviews (guests allowed)" RLS already permits this. No admin attribution stored.
 
-**b. Serve resized versions of existing images** via Supabase image transformations
-- Add a small helper `getStorageThumb(url, { width, quality })` that rewrites `/object/public/...` URLs to `/render/image/public/...?width=…&quality=…&format=origin`
-- Use it in:
-  - `ReviewCard` (cards: width 800, quality 70)
-  - `FeaturedReviews` (thumbs: width 600, quality 70)
-  - `Profile`, `Model`, `Brand`, `SavedReviews` grids (width 400, quality 65)
-  - Avatars (width 80)
-- Add `decoding="async"` and `fetchpriority="low"` to lazy images; first hero image keeps `fetchpriority="high"`.
+## Backend changes
 
-### 2. Cut request waterfalls in the Feed
+- New edge function `supabase/functions/transcribe-interview/index.ts`
+  - Accepts `multipart/form-data` with an `audio` file (or base64 JSON).
+  - Calls Lovable AI Gateway with `google/gemini-2.5-flash` using `input_audio` content part; system prompt asks for a clean verbatim transcript.
+  - Returns `{ transcript: string }`.
+  - Handles 402/429 and CORS.
+- No DB migration required — reuses `reviews` guest path and existing `shoe-photos` / `review-media` buckets.
 
-`src/components/ReviewCard.tsx` currently fires **3 queries per card** (likes, comment count, saved). With 50 cards that's 150 round-trips.
-- Move these into the parent `Feed` (and `FeaturedReviews`, `Profile`) as **single batched queries**:
-  - `likes`: `select(review_id, user_id).in('review_id', ids)` → group client-side
-  - `comments`: `select('review_id', { count: 'exact' })` per page → use a single `select(review_id).in(...)` and count in JS
-  - `saved`: `select(review_id).eq('user_id', me).in('review_id', ids)`
-- Pass `likeCount`, `isLiked`, `commentCount`, `isSaved` down as props. ReviewCard no longer queries on mount.
+## Frontend changes
 
-### 3. Smarter React Query defaults
+- `src/pages/admin/Interview.tsx` — new 3-step page (Record → Photo → Confirm).
+- `src/components/admin/AudioRecorder.tsx` — MediaRecorder wrapper with timer + replay.
+- Route added to `src/App.tsx` under the `/admin` nested routes.
+- Sidebar entry "Interview" in `AdminSidebar.tsx` (Mic icon).
+- "Start Interview" CTA card on `pages/admin/Overview.tsx`.
 
-In `src/App.tsx`, configure the `QueryClient` with:
-- `staleTime: 60_000`
-- `gcTime: 5 * 60_000`
-- `refetchOnWindowFocus: false`
-- `retry: 1`
+## Technical notes
 
-This stops repeated refetches when navigating between pages.
+- Reuse `Combobox` (with `allowCustom`) for brand/model selection, prefilled by AI identification.
+- Audio uploaded directly to the edge function (no storage bucket needed — transcripts only); raw audio is not persisted to keep things simple. (Can be added later if desired.)
+- Photo stored in `shoe-photos` bucket; URL added to `reviews.media_urls`.
+- All AI calls go through Lovable AI Gateway via the edge function — no client-side keys.
 
-### 4. Code-split routes
+## Out of scope
 
-Convert `src/App.tsx` route imports to `React.lazy` + `<Suspense>`:
-- Admin pages, `Sherpa`, `Messages`, `EditProfile`, `SavedReviews`, `Brand`, `Model`, `Review` are heavy and rarely needed on first paint.
-- Keep `Index`, `Login`, `Feed` eager.
-
-This shrinks the initial JS bundle significantly.
-
-### 5. Smaller initial Feed page
-
-- Lower default `.limit(50)` → `.limit(15)` and add a "Load more" button (or infinite scroll later).
-- Move filters that we apply client-side (brand/category/city/country) into the SQL query so we don't fetch rows we'll discard.
-
-### 6. Service worker
-`public/sw.js` already does stale-while-revalidate. Confirm it's caching Supabase storage GETs (images) — if not, add a cache rule for `*.supabase.co/storage/v1/object/public/*` and `/render/image/public/*` so repeat visits are instant.
-
-## Out of scope (can do later)
-- Backfill job to re-encode existing 2.4 MB photos in storage to WebP. The Supabase transformation CDN above already gives us small versions on the fly, so this is optional.
-- Switching to a CDN like Cloudflare Images.
-
-## Expected impact
-- First contentful image on Feed/landing should drop from ~2.4 MB to ~80–150 KB per card.
-- Feed network requests drop from ~150+ to ~5.
-- Initial JS payload roughly halved by route splitting.
-
-## Files touched
-- `src/lib/imageCompression.ts` (stronger compression + helper export)
-- `src/components/ReviewCard.tsx` (accept props, drop internal queries)
-- `src/components/landing/FeaturedReviews.tsx` (thumb URLs, batched tags already done)
-- `src/pages/Feed.tsx` (batched likes/comments/saved, smaller limit, server-side filters)
-- `src/pages/Profile.tsx`, `src/pages/Model.tsx`, `src/pages/Brand.tsx`, `src/pages/SavedReviews.tsx` (thumb URLs + batched data where they render cards)
-- `src/App.tsx` (QueryClient config + lazy routes)
-- `public/sw.js` (image cache rule, if missing)
+- Persisting raw audio recordings.
+- A separate `interviews` table — review is the sole output.
+- Offline/queued capture (events with no signal).
