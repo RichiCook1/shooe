@@ -6,11 +6,12 @@ import { toast } from "sonner";
 interface Props {
   onRecorded: (blob: Blob, mimeType: string) => void;
   disabled?: boolean;
+  maxSeconds?: number;
 }
 
 const fmt = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
 
-export function AudioRecorder({ onRecorded, disabled }: Props) {
+export function AudioRecorder({ onRecorded, disabled, maxSeconds = 120 }: Props) {
   const [recording, setRecording] = useState(false);
   const [elapsed, setElapsed] = useState(0);
   const [blobUrl, setBlobUrl] = useState<string | null>(null);
