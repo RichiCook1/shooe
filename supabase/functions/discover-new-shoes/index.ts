@@ -50,6 +50,26 @@ Deno.serve(async (req) => {
         if (!m) continue;
         const parsed = JSON.parse(m[0]);
         for (const model of parsed.models ?? []) {
+          // Guard: skip models whose name does not reference the queried brand.
+          // Prevents Perplexity hallucinations from polluting one brand with another's shoes
+          // (e.g. listing "Nike Pegasus" under a fake brand).
+          const nameLc = String(model?.name ?? "").toLowerCase().trim();
+          const brandLc = brand.name.toLowerCase().trim();
+          if (!nameLc) continue;
+          // Accept if the brand name appears as a whole word in the model name,
+          // OR if the model name starts with the brand. Also accept short brand
+          // names (<=3 chars like "On") only when they appear as a standalone token.
+          const tokens = nameLc.split(/[\s\-]+/);
+          const brandIsToken = tokens.includes(brandLc) || nameLc.startsWith(brandLc + " ");
+          if (!brandIsToken) {
+            errors.push({ brand: brand.name, skipped: model.name, reason: "name does not reference brand" });
+            continue;
+          }
+          // Strip brand prefix from name for cleaner storage (idempotent).
+          const cleanName = nameLc.startsWith(brandLc + " ")
+            ? model.name.slice(brand.name.length).trim()
+            : model.name;
+          model.name = cleanName;
           const { data: existing } = await supabase
             .from("models").select("id").eq("brand_id", brand.id).ilike("name", model.name).maybeSingle();
           if (existing) {
