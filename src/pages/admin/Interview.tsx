@@ -20,12 +20,19 @@ const blobToBase64 = (b: Blob) =>
   });
 
 type JobStatus = "processing" | "done" | "error";
+interface JobPayload {
+  blob: Blob | null;
+  mime: string;
+  file: File;
+  rating: number | null;
+}
 interface Job {
   id: string;
   startedAt: number;
   status: JobStatus;
   label: string;
   error?: string;
+  payload?: JobPayload;
 }
 
 async function processInterview(audioBlob: Blob | null, audioMime: string, photo: File, rating: number | null) {
@@ -181,33 +188,13 @@ export default function AdminInterview() {
     setPhotoPreview(preview);
   };
 
-  const submit = () => {
-    if (!photo) {
-      toast.error("Take a photo first");
-      return;
-    }
-    const id = crypto.randomUUID();
-    const label = `Interview ${new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`;
-    setJobs((prev) => [{ id, startedAt: Date.now(), status: "processing", label }, ...prev]);
-
-    // Capture & reset immediately
-    const blob = audioBlob;
-    const mime = audioMime;
-    const file = photo;
-    const r = rating;
-
-    setAudioBlob(null);
-    setPhoto(null);
-    setPhotoPreview("");
-    setRating(null);
-    setAudioKey((k) => k + 1);
-
-    toast.success("Submitted — processing in background");
-
-    // Fire and forget
-    processInterview(blob, mime, file, r)
+  const runJob = (id: string, label: string, payload: JobPayload) => {
+    setJobs((prev) =>
+      prev.map((j) => (j.id === id ? { ...j, status: "processing", error: undefined, payload } : j)),
+    );
+    processInterview(payload.blob, payload.mime, payload.file, payload.rating)
       .then((res) => {
-        setJobs((prev) => prev.map((j) => (j.id === id ? { ...j, status: "done" } : j)));
+        setJobs((prev) => prev.map((j) => (j.id === id ? { ...j, status: "done", payload: undefined } : j)));
         if (res?.needsIdentification) {
           toast.warning(`${label} saved as draft — shoe needs identification`);
         } else {
@@ -217,17 +204,43 @@ export default function AdminInterview() {
       .catch((err: any) => {
         console.error(err);
         setJobs((prev) =>
-          prev.map((j) => (j.id === id ? { ...j, status: "error", error: err.message || String(err) } : j))
+          prev.map((j) => (j.id === id ? { ...j, status: "error", error: err.message || String(err) } : j)),
         );
         toast.error(`${label} failed: ${err.message || err}`);
       });
   };
 
-  const retry = (job: Job) => {
-    // Can't retry without original data; just remove and let user re-record.
-    setJobs((prev) => prev.filter((j) => j.id !== job.id));
-    toast.message("Re-record to try again");
+  const submit = () => {
+    if (!photo) {
+      toast.error("Take a photo first");
+      return;
+    }
+    const id = crypto.randomUUID();
+    const label = `Interview ${new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`;
+    const payload: JobPayload = { blob: audioBlob, mime: audioMime, file: photo, rating };
+    setJobs((prev) => [{ id, startedAt: Date.now(), status: "processing", label, payload }, ...prev]);
+
+    setAudioBlob(null);
+    setPhoto(null);
+    setPhotoPreview("");
+    setRating(null);
+    setAudioKey((k) => k + 1);
+
+    toast.success("Submitted — processing in background");
+    runJob(id, label, payload);
   };
+
+  const retry = (job: Job) => {
+    if (!job.payload) {
+      toast.error("No data to retry — re-record");
+      setJobs((prev) => prev.filter((j) => j.id !== job.id));
+      return;
+    }
+    toast.message(`Retrying ${job.label}…`);
+    runJob(job.id, job.label, job.payload);
+  };
+
+  const dismiss = (job: Job) => setJobs((prev) => prev.filter((j) => j.id !== job.id));
 
   const clearDone = () => setJobs((prev) => prev.filter((j) => j.status === "processing"));
 
@@ -375,8 +388,13 @@ export default function AdminInterview() {
                 <span className="flex-1 truncate">{j.label}</span>
                 {j.status === "error" && (
                   <>
-                    <span className="text-xs text-destructive truncate max-w-[40%]">{j.error}</span>
-                    <button onClick={() => retry(j)} className="text-xs underline">
+                    <span className="text-xs text-destructive truncate max-w-[30%]">{j.error}</span>
+                    {j.payload && (
+                      <button onClick={() => retry(j)} className="text-xs underline font-medium">
+                        Retry
+                      </button>
+                    )}
+                    <button onClick={() => dismiss(j)} className="text-xs text-muted-foreground underline">
                       Dismiss
                     </button>
                   </>
