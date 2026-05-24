@@ -388,8 +388,13 @@ export default function AdminInterview() {
                 <span className="flex-1 truncate">{j.label}</span>
                 {j.status === "error" && (
                   <>
-                    <span className="text-xs text-destructive truncate max-w-[40%]">{j.error}</span>
-                    <button onClick={() => retry(j)} className="text-xs underline">
+                    <span className="text-xs text-destructive truncate max-w-[30%]">{j.error}</span>
+                    {j.payload && (
+                      <button onClick={() => retry(j)} className="text-xs underline font-medium">
+                        Retry
+                      </button>
+                    )}
+                    <button onClick={() => dismiss(j)} className="text-xs text-muted-foreground underline">
                       Dismiss
                     </button>
                   </>
