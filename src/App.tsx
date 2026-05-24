@@ -25,6 +25,7 @@ const AdminLayout = lazy(() => import("./components/admin/AdminLayout"));
 const AdminOverview = lazy(() => import("./pages/admin/Overview"));
 const AdminInterview = lazy(() => import("./pages/admin/Interview"));
 const AdminDrafts = lazy(() => import("./pages/admin/Drafts"));
+const AdminLeaderboard = lazy(() => import("./pages/admin/Leaderboard"));
 const AdminCatalog = lazy(() => import("./pages/admin/Catalog"));
 const AdminCatalogHealth = lazy(() => import("./pages/admin/CatalogHealth"));
 const AdminQueue = lazy(() => import("./pages/admin/Queue"));
