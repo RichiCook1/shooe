@@ -372,6 +372,16 @@ export default function AdminCatalog() {
               </TableBody>
             </Table>
           </Card>
+          <div className="flex items-center justify-between mt-3 text-sm">
+            <span className="text-muted-foreground">
+              {brandsCount === 0 ? "No results" : `Showing ${brandsPage * PAGE_SIZE + 1}–${Math.min((brandsPage + 1) * PAGE_SIZE, brandsCount)} of ${brandsCount}`}
+            </span>
+            <div className="flex gap-2 items-center">
+              <Button variant="outline" size="sm" className="rounded-none" disabled={brandsPage === 0} onClick={() => setBrandsPage(p => Math.max(0, p - 1))}>Prev</Button>
+              <span className="text-muted-foreground">Page {brandsPage + 1} / {brandsTotalPages}</span>
+              <Button variant="outline" size="sm" className="rounded-none" disabled={brandsPage + 1 >= brandsTotalPages} onClick={() => setBrandsPage(p => p + 1)}>Next</Button>
+            </div>
+          </div>
         </TabsContent>
       </Tabs>
     </div>
