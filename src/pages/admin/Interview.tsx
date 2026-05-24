@@ -188,13 +188,6 @@ export default function AdminInterview() {
     setPhotoPreview(preview);
   };
 
-  const submit = () => {
-    if (!photo) {
-      toast.error("Take a photo first");
-      return;
-    }
-    const id = crypto.randomUUID();
-    const label = `Interview ${new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`;
   const runJob = (id: string, label: string, payload: JobPayload) => {
     setJobs((prev) =>
       prev.map((j) => (j.id === id ? { ...j, status: "processing", error: undefined, payload } : j)),
