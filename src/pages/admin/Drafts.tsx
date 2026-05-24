@@ -4,10 +4,11 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { Trash2, AlertCircle, ExternalLink, Search } from "lucide-react";
+import { Trash2, AlertCircle, ExternalLink, Search, Pencil } from "lucide-react";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
 import { formatDistanceToNow } from "date-fns";
+import { EditDraftDialog, DraftReviewLite } from "@/components/admin/EditDraftDialog";
 
 interface DraftReview {
   id: string;
