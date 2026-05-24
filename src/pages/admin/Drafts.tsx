@@ -34,17 +34,49 @@ export default function AdminDrafts() {
     setLoading(true);
     const { data, error } = await supabase
       .from("reviews")
-      .select(
-        "id, content, media_urls, created_at, guest_session_id, model_id, models:model_id(id, name, pending_review, brands:brand_id(id, name))"
-      )
+      .select("id, content, media_urls, created_at, guest_session_id, model_id")
       .like("guest_session_id", "interview:%")
       .order("created_at", { ascending: false })
       .limit(200);
     if (error) {
       toast.error(error.message);
-    } else {
-      setDrafts((data || []) as any);
+      setLoading(false);
+      return;
     }
+    const reviews = data || [];
+    const modelIds = Array.from(new Set(reviews.map((r) => r.model_id).filter(Boolean)));
+    let modelsMap = new Map<string, any>();
+    let brandsMap = new Map<string, any>();
+    if (modelIds.length) {
+      const { data: models } = await supabase
+        .from("models")
+        .select("id, name, pending_review, brand_id")
+        .in("id", modelIds);
+      (models || []).forEach((m) => modelsMap.set(m.id, m));
+      const brandIds = Array.from(new Set((models || []).map((m) => m.brand_id).filter(Boolean)));
+      if (brandIds.length) {
+        const { data: brands } = await supabase
+          .from("brands")
+          .select("id, name")
+          .in("id", brandIds);
+        (brands || []).forEach((b) => brandsMap.set(b.id, b));
+      }
+    }
+    const enriched: DraftReview[] = reviews.map((r) => {
+      const m = modelsMap.get(r.model_id);
+      return {
+        ...r,
+        models: m
+          ? {
+              id: m.id,
+              name: m.name,
+              pending_review: m.pending_review,
+              brands: brandsMap.get(m.brand_id) || null,
+            }
+          : null,
+      } as DraftReview;
+    });
+    setDrafts(enriched);
     setLoading(false);
   };
 
