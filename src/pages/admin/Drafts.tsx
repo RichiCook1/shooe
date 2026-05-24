@@ -4,10 +4,11 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { Trash2, AlertCircle, ExternalLink, Search } from "lucide-react";
+import { Trash2, AlertCircle, ExternalLink, Search, Pencil } from "lucide-react";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
 import { formatDistanceToNow } from "date-fns";
+import { EditDraftDialog, DraftReviewLite } from "@/components/admin/EditDraftDialog";
 
 interface DraftReview {
   id: string;
@@ -16,6 +17,10 @@ interface DraftReview {
   created_at: string;
   guest_session_id: string | null;
   model_id: string;
+  rating: number | null;
+  terrain: "road" | "trail" | "mixed" | "track" | null;
+  distance_km: number | null;
+  location: string | null;
   models: {
     id: string;
     name: string;
@@ -29,12 +34,13 @@ export default function AdminDrafts() {
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState("");
   const [onlyNeedsId, setOnlyNeedsId] = useState(false);
+  const [editing, setEditing] = useState<DraftReviewLite | null>(null);
 
   const load = async () => {
     setLoading(true);
     const { data, error } = await supabase
       .from("reviews")
-      .select("id, content, media_urls, created_at, guest_session_id, model_id")
+      .select("id, content, media_urls, created_at, guest_session_id, model_id, rating, terrain, distance_km, location")
       .like("guest_session_id", "interview:%")
       .order("created_at", { ascending: false })
       .limit(200);
@@ -202,7 +208,29 @@ export default function AdminDrafts() {
                   <p className="text-sm text-muted-foreground line-clamp-3 whitespace-pre-wrap">
                     {d.content || <em className="italic">No transcript</em>}
                   </p>
-                  <div className="flex items-center gap-2 pt-1">
+                  <div className="flex items-center gap-2 pt-1 flex-wrap">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-7 px-2"
+                      onClick={() =>
+                        setEditing({
+                          id: d.id,
+                          content: d.content,
+                          model_id: d.model_id,
+                          rating: d.rating,
+                          terrain: d.terrain,
+                          distance_km: d.distance_km,
+                          location: d.location,
+                          models: d.models
+                            ? { id: d.models.id, name: d.models.name, brands: d.models.brands }
+                            : null,
+                        })
+                      }
+                    >
+                      <Pencil className="h-3 w-3 mr-1" />
+                      Edit
+                    </Button>
                     {d.model_id && (
                       <Button asChild variant="ghost" size="sm" className="h-7 px-2">
                         <Link to={`/model/${d.model_id}`}>
@@ -227,6 +255,13 @@ export default function AdminDrafts() {
           })}
         </div>
       )}
+
+      <EditDraftDialog
+        draft={editing}
+        open={!!editing}
+        onOpenChange={(v) => !v && setEditing(null)}
+        onSaved={load}
+      />
     </div>
   );
 }

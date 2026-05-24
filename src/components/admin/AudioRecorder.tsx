@@ -6,11 +6,12 @@ import { toast } from "sonner";
 interface Props {
   onRecorded: (blob: Blob, mimeType: string) => void;
   disabled?: boolean;
+  maxSeconds?: number;
 }
 
 const fmt = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
 
-export function AudioRecorder({ onRecorded, disabled }: Props) {
+export function AudioRecorder({ onRecorded, disabled, maxSeconds = 120 }: Props) {
   const [recording, setRecording] = useState(false);
   const [elapsed, setElapsed] = useState(0);
   const [blobUrl, setBlobUrl] = useState<string | null>(null);
@@ -49,7 +50,17 @@ export function AudioRecorder({ onRecorded, disabled }: Props) {
       rec.start();
       setRecording(true);
       setElapsed(0);
-      timerRef.current = window.setInterval(() => setElapsed((s) => s + 1), 1000);
+      timerRef.current = window.setInterval(() => {
+        setElapsed((s) => {
+          const next = s + 1;
+          if (next >= maxSeconds) {
+            try { rec.state !== "inactive" && rec.stop(); } catch {}
+            if (timerRef.current) window.clearInterval(timerRef.current);
+            setRecording(false);
+          }
+          return next;
+        });
+      }, 1000);
     } catch (e: any) {
       toast.error("Microphone permission denied");
     }
@@ -69,7 +80,9 @@ export function AudioRecorder({ onRecorded, disabled }: Props) {
 
   return (
     <div className="flex flex-col items-center gap-4 py-6">
-      <div className="text-5xl font-display tracking-wider tabular-nums">{fmt(elapsed)}</div>
+      <div className="text-5xl font-display tracking-wider tabular-nums">
+        {fmt(elapsed)} <span className="text-base text-muted-foreground">/ {fmt(maxSeconds)}</span>
+      </div>
       {!blobUrl ? (
         <Button
           type="button"
@@ -90,7 +103,7 @@ export function AudioRecorder({ onRecorded, disabled }: Props) {
         </div>
       )}
       <p className="text-xs text-muted-foreground uppercase tracking-wider">
-        {recording ? "Recording…" : blobUrl ? "Review and continue" : "Tap to record"}
+        {recording ? `Recording… max ${maxSeconds}s` : blobUrl ? "Review and continue" : `Tap to record · up to ${maxSeconds}s`}
       </p>
     </div>
   );
