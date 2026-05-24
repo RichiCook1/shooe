@@ -10,6 +10,7 @@ import {
   BarChart3,
   ArrowLeft,
   Mic,
+  FileText,
 } from "lucide-react";
 import {
   Sidebar,
