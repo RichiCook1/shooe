@@ -50,7 +50,17 @@ export function AudioRecorder({ onRecorded, disabled, maxSeconds = 120 }: Props)
       rec.start();
       setRecording(true);
       setElapsed(0);
-      timerRef.current = window.setInterval(() => setElapsed((s) => s + 1), 1000);
+      timerRef.current = window.setInterval(() => {
+        setElapsed((s) => {
+          const next = s + 1;
+          if (next >= maxSeconds) {
+            try { rec.state !== "inactive" && rec.stop(); } catch {}
+            if (timerRef.current) window.clearInterval(timerRef.current);
+            setRecording(false);
+          }
+          return next;
+        });
+      }, 1000);
     } catch (e: any) {
       toast.error("Microphone permission denied");
     }
