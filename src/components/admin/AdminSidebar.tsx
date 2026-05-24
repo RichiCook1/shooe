@@ -12,6 +12,7 @@ import {
   Mic,
   FileText,
   Trophy,
+  Upload,
 } from "lucide-react";
 import {
   Sidebar,
@@ -30,6 +31,7 @@ const items = [
   { title: "Interview", url: "/admin/interview", icon: Mic },
   { title: "Drafts", url: "/admin/drafts", icon: FileText },
   { title: "Leaderboard", url: "/admin/leaderboard", icon: Trophy },
+  { title: "Import Reviews", url: "/admin/import-reviews", icon: Upload },
   { title: "Catalog", url: "/admin/catalog", icon: Footprints, end: true },
   { title: "Catalog Health", url: "/admin/catalog/health", icon: Activity },
   { title: "Pending Queue", url: "/admin/queue", icon: Inbox },
