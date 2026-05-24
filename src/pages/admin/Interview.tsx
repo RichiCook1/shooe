@@ -199,9 +199,13 @@ export default function AdminInterview() {
 
     // Fire and forget
     processInterview(blob, mime, file)
-      .then(() => {
+      .then((res) => {
         setJobs((prev) => prev.map((j) => (j.id === id ? { ...j, status: "done" } : j)));
-        toast.success(`${label} saved`);
+        if (res?.needsIdentification) {
+          toast.warning(`${label} saved as draft — shoe needs identification`);
+        } else {
+          toast.success(`${label} saved`);
+        }
       })
       .catch((err: any) => {
         console.error(err);
