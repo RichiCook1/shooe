@@ -13,12 +13,16 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 
+const PAGE_SIZE = 50;
+
 export default function AdminCatalog() {
   const qc = useQueryClient();
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<"all" | "unverified" | "missing_image" | "pending" | "user_submitted">("all");
   const [brandFilter, setBrandFilter] = useState<{ id: string; name: string } | null>(null);
   const [tab, setTab] = useState("models");
+  const [modelsPage, setModelsPage] = useState(0);
+  const [brandsPage, setBrandsPage] = useState(0);
 
   // Add brand dialog
   const [brandOpen, setBrandOpen] = useState(false);
@@ -28,30 +32,45 @@ export default function AdminCatalog() {
   const [modelOpen, setModelOpen] = useState(false);
   const [newModel, setNewModel] = useState({ name: "", brand_id: "", category: "road", image_url: "" });
 
-  const { data: brands } = useQuery({
-    queryKey: ["admin-brands", search],
+  const { data: brandsResult } = useQuery({
+    queryKey: ["admin-brands", search, brandsPage],
     queryFn: async () => {
-      let q = supabase.from("brands").select("*").order("name");
+      let q = supabase.from("brands").select("*", { count: "exact" }).order("name");
       if (search) q = q.ilike("name", `%${search}%`);
-      const { data } = await q.limit(200);
+      const { data, count } = await q.range(brandsPage * PAGE_SIZE, brandsPage * PAGE_SIZE + PAGE_SIZE - 1);
+      return { rows: data ?? [], count: count ?? 0 };
+    },
+  });
+  const brands = brandsResult?.rows ?? [];
+  const brandsCount = brandsResult?.count ?? 0;
+
+  // Unpaginated brands list for the Add Model dropdown
+  const { data: allBrands } = useQuery({
+    queryKey: ["admin-all-brands"],
+    queryFn: async () => {
+      const { data } = await supabase.from("brands").select("id, name").order("name").limit(1000);
       return data ?? [];
     },
   });
 
-  const { data: models } = useQuery({
-    queryKey: ["admin-models", search, filter, brandFilter?.id],
+  const { data: modelsResult } = useQuery({
+    queryKey: ["admin-models", search, filter, brandFilter?.id, modelsPage],
     queryFn: async () => {
-      let q = supabase.from("models").select("*, brands(name)").order("created_at", { ascending: false });
+      let q = supabase.from("models").select("*, brands(name)", { count: "exact" }).order("created_at", { ascending: false });
       if (search) q = q.ilike("name", `%${search}%`);
       if (filter === "unverified") q = q.eq("verified", false);
       if (filter === "missing_image") q = q.is("image_url", null);
       if (filter === "pending") q = q.eq("pending_review", true);
       if (filter === "user_submitted") q = q.eq("source", "user_submitted");
       if (brandFilter) q = q.eq("brand_id", brandFilter.id);
-      const { data } = await q.limit(300);
-      return data ?? [];
+      const { data, count } = await q.range(modelsPage * PAGE_SIZE, modelsPage * PAGE_SIZE + PAGE_SIZE - 1);
+      return { rows: data ?? [], count: count ?? 0 };
     },
   });
+  const models = modelsResult?.rows ?? [];
+  const modelsCount = modelsResult?.count ?? 0;
+  const modelsTotalPages = Math.max(1, Math.ceil(modelsCount / PAGE_SIZE));
+  const brandsTotalPages = Math.max(1, Math.ceil(brandsCount / PAGE_SIZE));
 
   const selectBrand = (b: { id: string; name: string }) => {
     setBrandFilter(b);
