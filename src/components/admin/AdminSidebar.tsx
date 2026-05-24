@@ -11,6 +11,7 @@ import {
   ArrowLeft,
   Mic,
   FileText,
+  Trophy,
 } from "lucide-react";
 import {
   Sidebar,
