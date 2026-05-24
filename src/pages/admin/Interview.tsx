@@ -2,11 +2,13 @@ import { useEffect, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { AudioRecorder } from "@/components/admin/AudioRecorder";
 import { compressImage } from "@/lib/imageCompression";
-import { Camera, Check, Loader2, X, Send, AlertCircle } from "lucide-react";
+import { Camera, Check, Loader2, X, Send, AlertCircle, QrCode } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
+import { QRCodeSVG } from "qrcode.react";
 
 const blobToBase64 = (b: Blob) =>
   new Promise<string>((res, rej) => {
@@ -202,9 +204,38 @@ export default function AdminInterview() {
     <div className="max-w-2xl mx-auto space-y-6 pb-32">
       <div className="flex items-center justify-between">
         <h1 className="text-3xl font-display tracking-wider uppercase">Interview</h1>
-        <Button variant="ghost" size="sm" onClick={() => navigate("/admin")}>
-          <X className="h-4 w-4 mr-1" /> Exit
-        </Button>
+        <div className="flex items-center gap-2">
+          <Dialog>
+            <DialogTrigger asChild>
+              <Button variant="outline" size="sm">
+                <QrCode className="h-4 w-4 mr-1" />
+                Self-review
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="rounded-none border-border max-w-sm">
+              <DialogHeader>
+                <DialogTitle className="text-lg font-display uppercase tracking-wider text-center">
+                  Review yourself
+                </DialogTitle>
+              </DialogHeader>
+              <div className="flex flex-col items-center gap-4 py-4">
+                <QRCodeSVG
+                  value="https://shoe-sherpa.com/review"
+                  size={200}
+                  bgColor="transparent"
+                  fgColor="currentColor"
+                  className="text-foreground"
+                />
+                <p className="text-sm text-muted-foreground text-center">
+                  Scan this QR code to write your own review on your phone.
+                </p>
+              </div>
+            </DialogContent>
+          </Dialog>
+          <Button variant="ghost" size="sm" onClick={() => navigate("/admin")}>
+            <X className="h-4 w-4 mr-1" /> Exit
+          </Button>
+        </div>
       </div>
 
       <p className="text-sm text-muted-foreground">
