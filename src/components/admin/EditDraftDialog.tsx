@@ -10,8 +10,10 @@ import { Label } from "@/components/ui/label";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { Search, Star } from "lucide-react";
+import { Search, Star, Sparkles, Undo2, Loader2 } from "lucide-react";
 
 type Terrain = "road" | "trail" | "mixed" | "track";
 
@@ -23,6 +25,11 @@ export interface DraftReviewLite {
   terrain: Terrain | null;
   distance_km: number | null;
   location: string | null;
+  raw_transcript?: string | null;
+  content_en?: string | null;
+  original_language?: string | null;
+  cleaned_at?: string | null;
+  ai_suggestions?: any;
   models: { id: string; name: string; brands: { id: string; name: string } | null } | null;
 }
 
@@ -35,6 +42,10 @@ interface Props {
 
 export function EditDraftDialog({ draft, open, onOpenChange, onSaved }: Props) {
   const [content, setContent] = useState("");
+  const [contentEn, setContentEn] = useState("");
+  const [rawTranscript, setRawTranscript] = useState("");
+  const [language, setLanguage] = useState<string | null>(null);
+  const [suggestions, setSuggestions] = useState<{ rating?: number | null; terrain?: string | null; tag_ids?: string[] } | null>(null);
   const [rating, setRating] = useState<number | null>(null);
   const [terrain, setTerrain] = useState<Terrain | "">("");
   const [distance, setDistance] = useState<string>("");
@@ -44,10 +55,15 @@ export function EditDraftDialog({ draft, open, onOpenChange, onSaved }: Props) {
   const [search, setSearch] = useState("");
   const [results, setResults] = useState<any[]>([]);
   const [saving, setSaving] = useState(false);
+  const [cleaning, setCleaning] = useState(false);
 
   useEffect(() => {
     if (!draft) return;
     setContent(draft.content || "");
+    setContentEn(draft.content_en || "");
+    setRawTranscript(draft.raw_transcript || "");
+    setLanguage(draft.original_language || null);
+    setSuggestions(draft.ai_suggestions || null);
     setRating(draft.rating);
     setTerrain((draft.terrain as Terrain) || "");
     setDistance(draft.distance_km != null ? String(draft.distance_km) : "");
@@ -75,6 +91,39 @@ export function EditDraftDialog({ draft, open, onOpenChange, onSaved }: Props) {
     return () => clearTimeout(t);
   }, [search]);
 
+  const reclean = async () => {
+    const source = rawTranscript || content;
+    if (!source.trim()) { toast.error("Nothing to clean"); return; }
+    if (content && !confirm("Overwrite the current cleaned text with a fresh AI version?")) return;
+    setCleaning(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("normalize-interview", {
+        body: { transcript: source },
+      });
+      if (error) throw error;
+      setContent(data?.content_cleaned || source);
+      setContentEn(data?.content_en || "");
+      setLanguage(data?.language || null);
+      setSuggestions({
+        rating: data?.rating ?? null,
+        terrain: data?.terrain ?? null,
+        tag_ids: data?.tag_ids ?? [],
+      });
+      if (!rawTranscript) setRawTranscript(source);
+      toast.success("Re-cleaned with AI");
+    } catch (e: any) {
+      toast.error(e.message || "Cleanup failed");
+    } finally {
+      setCleaning(false);
+    }
+  };
+
+  const revertToRaw = () => {
+    if (!rawTranscript) { toast.error("No raw transcript stored"); return; }
+    if (!confirm("Replace cleaned content with the raw transcript?")) return;
+    setContent(rawTranscript);
+  };
+
   const save = async () => {
     if (!draft) return;
     setSaving(true);
@@ -83,6 +132,11 @@ export function EditDraftDialog({ draft, open, onOpenChange, onSaved }: Props) {
       .from("reviews")
       .update({
         content: cleaned || null,
+        content_en: contentEn.trim() || null,
+        raw_transcript: rawTranscript.trim() || null,
+        original_language: language,
+        cleaned_at: new Date().toISOString(),
+        ai_suggestions: suggestions,
         model_id: modelId,
         rating: rating,
         terrain: terrain || null,
@@ -99,12 +153,17 @@ export function EditDraftDialog({ draft, open, onOpenChange, onSaved }: Props) {
 
   if (!draft) return null;
 
+  const sRating = suggestions?.rating;
+  const sTerrain = suggestions?.terrain;
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto rounded-none">
         <DialogHeader>
-          <DialogTitle className="font-display uppercase tracking-wider">
+          <DialogTitle className="font-display uppercase tracking-wider flex items-center gap-2">
             Edit Draft
+            {language && <Badge variant="secondary" className="rounded-none text-xs uppercase">{language}</Badge>}
+            {!draft.cleaned_at && <Badge variant="outline" className="rounded-none text-xs">Needs cleanup</Badge>}
           </DialogTitle>
         </DialogHeader>
 
@@ -143,14 +202,81 @@ export function EditDraftDialog({ draft, open, onOpenChange, onSaved }: Props) {
           </div>
 
           <div className="space-y-1.5">
-            <Label className="text-xs uppercase tracking-wider">Transcript</Label>
-            <Textarea
-              value={content}
-              onChange={(e) => setContent(e.target.value)}
-              rows={6}
-              className="rounded-none"
-            />
+            <div className="flex items-center justify-between">
+              <Label className="text-xs uppercase tracking-wider">Review text</Label>
+              <div className="flex items-center gap-2">
+                <Button type="button" variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={reclean} disabled={cleaning}>
+                  {cleaning ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <Sparkles className="h-3 w-3 mr-1" />}
+                  Re-clean with AI
+                </Button>
+                {rawTranscript && (
+                  <Button type="button" variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={revertToRaw}>
+                    <Undo2 className="h-3 w-3 mr-1" />
+                    Revert to raw
+                  </Button>
+                )}
+              </div>
+            </div>
+            <Tabs defaultValue="cleaned">
+              <TabsList className="rounded-none">
+                <TabsTrigger value="cleaned" className="rounded-none">Cleaned</TabsTrigger>
+                <TabsTrigger value="english" className="rounded-none">English</TabsTrigger>
+                <TabsTrigger value="raw" className="rounded-none">Raw transcript</TabsTrigger>
+              </TabsList>
+              <TabsContent value="cleaned">
+                <Textarea
+                  value={content}
+                  onChange={(e) => setContent(e.target.value)}
+                  rows={8}
+                  className="rounded-none"
+                />
+              </TabsContent>
+              <TabsContent value="english">
+                <Textarea
+                  value={contentEn}
+                  onChange={(e) => setContentEn(e.target.value)}
+                  rows={8}
+                  placeholder="English translation"
+                  className="rounded-none"
+                />
+              </TabsContent>
+              <TabsContent value="raw">
+                <Textarea
+                  value={rawTranscript}
+                  onChange={(e) => setRawTranscript(e.target.value)}
+                  rows={8}
+                  placeholder="Original verbatim transcript"
+                  className="rounded-none font-mono text-xs"
+                />
+              </TabsContent>
+            </Tabs>
           </div>
+
+          {(sRating != null || sTerrain) && (
+            <div className="border border-border p-2 space-y-1.5">
+              <div className="text-xs uppercase tracking-wider text-muted-foreground">AI suggestions</div>
+              <div className="flex flex-wrap gap-2">
+                {sRating != null && (
+                  <button
+                    type="button"
+                    onClick={() => setRating(sRating as number)}
+                    className="text-xs px-2 py-1 border border-border hover:bg-muted"
+                  >
+                    Apply rating {Number(sRating).toFixed(1)}
+                  </button>
+                )}
+                {sTerrain && (
+                  <button
+                    type="button"
+                    onClick={() => setTerrain(sTerrain as Terrain)}
+                    className="text-xs px-2 py-1 border border-border hover:bg-muted capitalize"
+                  >
+                    Apply terrain: {sTerrain}
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
 
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
