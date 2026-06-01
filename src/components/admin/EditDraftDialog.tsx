@@ -13,7 +13,7 @@ import {
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { Search, Star, Sparkles, Undo2, Loader2 } from "lucide-react";
+import { Search, Star, Sparkles, Undo2, Loader2, Camera } from "lucide-react";
 
 type Terrain = "road" | "trail" | "mixed" | "track";
 
