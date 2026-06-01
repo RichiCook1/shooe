@@ -203,6 +203,16 @@ export default function AdminDrafts() {
                           Needs ID
                         </Badge>
                       )}
+                      {!d.cleaned_at && (
+                        <Badge variant="outline" className="rounded-none text-xs">
+                          Needs cleanup
+                        </Badge>
+                      )}
+                      {d.original_language && d.original_language !== "en" && (
+                        <Badge variant="secondary" className="rounded-none text-xs uppercase">
+                          {d.original_language}
+                        </Badge>
+                      )}
                       {d.models?.pending_review && !needsId && (
                         <Badge variant="secondary" className="rounded-none text-xs">
                           Pending
