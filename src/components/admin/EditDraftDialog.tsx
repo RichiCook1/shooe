@@ -66,6 +66,8 @@ export function EditDraftDialog({ draft, open, onOpenChange, onSaved }: Props) {
   const [results, setResults] = useState<any[]>([]);
   const [saving, setSaving] = useState(false);
   const [cleaning, setCleaning] = useState(false);
+  const [detecting, setDetecting] = useState(false);
+  const [detected, setDetected] = useState<DetectCandidate[] | null>(null);
 
   useEffect(() => {
     if (!draft) return;
