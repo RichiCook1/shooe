@@ -242,6 +242,7 @@ export default function AdminDrafts() {
                           original_language: d.original_language,
                           cleaned_at: d.cleaned_at,
                           ai_suggestions: d.ai_suggestions,
+                          media_urls: d.media_urls,
                           models: d.models
                             ? { id: d.models.id, name: d.models.name, brands: d.models.brands }
                             : null,
