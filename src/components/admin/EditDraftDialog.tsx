@@ -270,6 +270,58 @@ export function EditDraftDialog({ draft, open, onOpenChange, onSaved }: Props) {
                 ))}
               </div>
             )}
+            {draft?.media_urls && draft.media_urls.length > 0 && (
+              <div className="pt-1">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-8 rounded-none text-xs uppercase tracking-wider"
+                  onClick={detectShoe}
+                  disabled={detecting}
+                >
+                  {detecting ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <Camera className="h-3 w-3 mr-1" />}
+                  Detect shoe from photo
+                </Button>
+              </div>
+            )}
+            {detected && detected.length > 0 && (
+              <div className="border border-border divide-y divide-border">
+                <div className="text-xs uppercase tracking-wider text-muted-foreground px-3 py-2 bg-muted">
+                  Top {detected.length} matches — pick one
+                </div>
+                {detected.map((c, i) => (
+                  <button
+                    key={i}
+                    type="button"
+                    onClick={() => pickDetected(c)}
+                    className="flex w-full items-center gap-3 text-left px-3 py-2 hover:bg-muted"
+                  >
+                    {c.modelMatch?.image_url ? (
+                      <img src={c.modelMatch.image_url} alt="" className="h-10 w-10 object-cover" />
+                    ) : (
+                      <div className="h-10 w-10 bg-muted flex items-center justify-center">
+                        <Camera className="h-4 w-4 text-muted-foreground" />
+                      </div>
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-medium truncate">
+                        {c.brand} · {c.model}
+                      </div>
+                      {c.reason && (
+                        <div className="text-xs text-muted-foreground truncate">{c.reason}</div>
+                      )}
+                    </div>
+                    <div className="text-xs tabular-nums text-muted-foreground">
+                      {c.confidence != null ? `${Math.round(c.confidence * 100)}%` : ""}
+                      {!c.modelMatch && (
+                        <span className="ml-1 uppercase">· new</span>
+                      )}
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
 
           <div className="space-y-1.5">
