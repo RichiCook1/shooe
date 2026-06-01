@@ -45,7 +45,7 @@ export default function AdminDrafts() {
     setLoading(true);
     const { data, error } = await supabase
       .from("reviews")
-      .select("id, content, media_urls, created_at, guest_session_id, model_id, rating, terrain, distance_km, location")
+      .select("id, content, media_urls, created_at, guest_session_id, model_id, rating, terrain, distance_km, location, raw_transcript, content_en, original_language, cleaned_at, ai_suggestions")
       .like("guest_session_id", "interview:%")
       .order("created_at", { ascending: false })
       .limit(200);
