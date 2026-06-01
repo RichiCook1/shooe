@@ -30,7 +30,17 @@ export interface DraftReviewLite {
   original_language?: string | null;
   cleaned_at?: string | null;
   ai_suggestions?: any;
+  media_urls?: string[] | null;
   models: { id: string; name: string; brands: { id: string; name: string } | null } | null;
+}
+
+interface DetectCandidate {
+  brand: string;
+  model: string;
+  confidence: number | null;
+  reason: string | null;
+  brandMatch: { id: string; name: string } | null;
+  modelMatch: { id: string; name: string; image_url?: string | null } | null;
 }
 
 interface Props {
