@@ -21,6 +21,11 @@ interface DraftReview {
   terrain: "road" | "trail" | "mixed" | "track" | null;
   distance_km: number | null;
   location: string | null;
+  raw_transcript: string | null;
+  content_en: string | null;
+  original_language: string | null;
+  cleaned_at: string | null;
+  ai_suggestions: any;
   models: {
     id: string;
     name: string;
