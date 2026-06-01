@@ -137,6 +137,64 @@ export function EditDraftDialog({ draft, open, onOpenChange, onSaved }: Props) {
     setContent(rawTranscript);
   };
 
+  const detectShoe = async () => {
+    const photo = draft?.media_urls?.[0];
+    if (!photo) { toast.error("No photo on this review"); return; }
+    setDetecting(true);
+    setDetected(null);
+    try {
+      const { data, error } = await supabase.functions.invoke("identify-shoe-from-image", {
+        body: { imageUrl: photo, topK: 3 },
+      });
+      if (error) throw error;
+      const cands: DetectCandidate[] = Array.isArray(data?.candidates) ? data.candidates : [];
+      if (!cands.length) { toast.error("Couldn't identify a shoe from this photo"); return; }
+      setDetected(cands);
+    } catch (e: any) {
+      toast.error(e.message || "Detection failed");
+    } finally {
+      setDetecting(false);
+    }
+  };
+
+  const pickDetected = async (c: DetectCandidate) => {
+    try {
+      let brandId = c.brandMatch?.id ?? null;
+      let brandName = c.brandMatch?.name ?? c.brand;
+      if (!brandId && c.brand) {
+        const { data: existing } = await supabase.from("brands").select("id, name").ilike("name", c.brand).maybeSingle();
+        if (existing) { brandId = existing.id; brandName = existing.name; }
+        else {
+          const { data: nb, error } = await supabase.from("brands").insert({ name: c.brand }).select("id, name").single();
+          if (error) throw error;
+          brandId = nb.id; brandName = nb.name;
+        }
+      }
+      let modelMatchId = c.modelMatch?.id ?? null;
+      let modelName = c.modelMatch?.name ?? c.model;
+      if (!modelMatchId && brandId && c.model) {
+        const { data: existingM } = await supabase.from("models")
+          .select("id, name").eq("brand_id", brandId).ilike("name", c.model).maybeSingle();
+        if (existingM) { modelMatchId = existingM.id; modelName = existingM.name; }
+        else {
+          const { data: nm, error } = await supabase.from("models")
+            .insert({ name: c.model, brand_id: brandId, pending_review: true })
+            .select("id, name").single();
+          if (error) throw error;
+          modelMatchId = nm.id; modelName = nm.name;
+        }
+      }
+      if (!modelMatchId) { toast.error("Couldn't resolve a model"); return; }
+      setModelId(modelMatchId);
+      setShoeLabel(`${brandName || "—"} · ${modelName}`);
+      setDetected(null);
+      toast.success("Shoe assigned — remember to Save");
+    } catch (e: any) {
+      toast.error(e.message || "Couldn't assign shoe");
+    }
+  };
+
+
   const save = async () => {
     if (!draft) return;
     setSaving(true);
