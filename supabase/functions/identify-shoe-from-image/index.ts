@@ -95,8 +95,9 @@ Deno.serve(async (req) => {
       })
     );
 
+    const top = candidates[0] || {};
     return new Response(
-      JSON.stringify({ candidates }),
+      JSON.stringify({ candidates, ...top }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (e: any) {
