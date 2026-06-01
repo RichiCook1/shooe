@@ -21,6 +21,11 @@ interface DraftReview {
   terrain: "road" | "trail" | "mixed" | "track" | null;
   distance_km: number | null;
   location: string | null;
+  raw_transcript: string | null;
+  content_en: string | null;
+  original_language: string | null;
+  cleaned_at: string | null;
+  ai_suggestions: any;
   models: {
     id: string;
     name: string;
@@ -40,7 +45,7 @@ export default function AdminDrafts() {
     setLoading(true);
     const { data, error } = await supabase
       .from("reviews")
-      .select("id, content, media_urls, created_at, guest_session_id, model_id, rating, terrain, distance_km, location")
+      .select("id, content, media_urls, created_at, guest_session_id, model_id, rating, terrain, distance_km, location, raw_transcript, content_en, original_language, cleaned_at, ai_suggestions")
       .like("guest_session_id", "interview:%")
       .order("created_at", { ascending: false })
       .limit(200);
@@ -198,6 +203,16 @@ export default function AdminDrafts() {
                           Needs ID
                         </Badge>
                       )}
+                      {!d.cleaned_at && (
+                        <Badge variant="outline" className="rounded-none text-xs">
+                          Needs cleanup
+                        </Badge>
+                      )}
+                      {d.original_language && d.original_language !== "en" && (
+                        <Badge variant="secondary" className="rounded-none text-xs uppercase">
+                          {d.original_language}
+                        </Badge>
+                      )}
                       {d.models?.pending_review && !needsId && (
                         <Badge variant="secondary" className="rounded-none text-xs">
                           Pending
@@ -222,6 +237,11 @@ export default function AdminDrafts() {
                           terrain: d.terrain,
                           distance_km: d.distance_km,
                           location: d.location,
+                          raw_transcript: d.raw_transcript,
+                          content_en: d.content_en,
+                          original_language: d.original_language,
+                          cleaned_at: d.cleaned_at,
+                          ai_suggestions: d.ai_suggestions,
                           models: d.models
                             ? { id: d.models.id, name: d.models.name, brands: d.models.brands }
                             : null,

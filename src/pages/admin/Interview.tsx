@@ -136,16 +136,50 @@ async function processInterview(audioBlob: Blob | null, audioMime: string, photo
   const adminId = authData?.user?.id || "anon";
   const guestSessionId = `interview:${adminId}:${crypto.randomUUID()}`;
   const noteSuffix = needsIdentification ? "\n\n[NEEDS SHOE IDENTIFICATION]" : "";
-  const { error: rErr } = await supabase.from("reviews").insert({
+  const rawTranscript = transcript || "";
+
+  // Normalize transcript into a clean review + extract metadata. Best-effort.
+  let normalized: any = null;
+  if (rawTranscript.trim()) {
+    try {
+      const { data: nData, error: nErr } = await supabase.functions.invoke("normalize-interview", {
+        body: { transcript: rawTranscript },
+      });
+      if (nErr) throw nErr;
+      normalized = nData;
+    } catch (e) {
+      console.error("normalize failed", e);
+    }
+  }
+
+  const cleanedContent = (normalized?.content_cleaned || rawTranscript) + noteSuffix;
+  const finalRating = rating ?? (typeof normalized?.rating === "number" ? normalized.rating : null);
+  const finalTerrain = normalized?.terrain ?? null;
+
+  const { data: inserted, error: rErr } = await supabase.from("reviews").insert({
     model_id: finalModelId,
-    content: (transcript || "") + noteSuffix || null,
+    content: cleanedContent || null,
     media_urls: [photoUrl],
     is_guest: true,
     guest_session_id: guestSessionId,
     user_id: null,
-    rating: rating,
-  });
+    rating: finalRating,
+    terrain: finalTerrain,
+    raw_transcript: rawTranscript || null,
+    content_en: normalized?.content_en || null,
+    original_language: normalized?.language || null,
+    cleaned_at: normalized ? new Date().toISOString() : null,
+    ai_suggestions: normalized
+      ? { rating: normalized.rating ?? null, terrain: normalized.terrain ?? null, tag_ids: normalized.tag_ids ?? [] }
+      : null,
+  }).select("id").single();
   if (rErr) throw rErr;
+
+  if (inserted?.id && Array.isArray(normalized?.tag_ids) && normalized.tag_ids.length) {
+    await supabase.from("review_tags").insert(
+      normalized.tag_ids.map((tag_id: string) => ({ review_id: inserted.id, tag_id })),
+    );
+  }
   return { needsIdentification };
 }
 

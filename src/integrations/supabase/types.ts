@@ -565,7 +565,10 @@ export type Database = {
       }
       reviews: {
         Row: {
+          ai_suggestions: Json | null
+          cleaned_at: string | null
           content: string | null
+          content_en: string | null
           created_at: string
           distance_km: number | null
           guest_session_id: string | null
@@ -574,13 +577,18 @@ export type Database = {
           location: string | null
           media_urls: string[] | null
           model_id: string
+          original_language: string | null
           rating: number | null
+          raw_transcript: string | null
           terrain: Database["public"]["Enums"]["terrain_type"] | null
           updated_at: string
           user_id: string | null
         }
         Insert: {
+          ai_suggestions?: Json | null
+          cleaned_at?: string | null
           content?: string | null
+          content_en?: string | null
           created_at?: string
           distance_km?: number | null
           guest_session_id?: string | null
@@ -589,13 +597,18 @@ export type Database = {
           location?: string | null
           media_urls?: string[] | null
           model_id: string
+          original_language?: string | null
           rating?: number | null
+          raw_transcript?: string | null
           terrain?: Database["public"]["Enums"]["terrain_type"] | null
           updated_at?: string
           user_id?: string | null
         }
         Update: {
+          ai_suggestions?: Json | null
+          cleaned_at?: string | null
           content?: string | null
+          content_en?: string | null
           created_at?: string
           distance_km?: number | null
           guest_session_id?: string | null
@@ -604,7 +617,9 @@ export type Database = {
           location?: string | null
           media_urls?: string[] | null
           model_id?: string
+          original_language?: string | null
           rating?: number | null
+          raw_transcript?: string | null
           terrain?: Database["public"]["Enums"]["terrain_type"] | null
           updated_at?: string
           user_id?: string | null
