@@ -88,6 +88,7 @@ export function EditDraftDialog({ draft, open, onOpenChange, onSaved }: Props) {
     );
     setSearch("");
     setResults([]);
+    setDetected(null);
   }, [draft]);
 
   useEffect(() => {
