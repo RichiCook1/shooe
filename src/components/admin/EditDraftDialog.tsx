@@ -13,7 +13,7 @@ import {
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { Search, Star, Sparkles, Undo2, Loader2 } from "lucide-react";
+import { Search, Star, Sparkles, Undo2, Loader2, Camera } from "lucide-react";
 
 type Terrain = "road" | "trail" | "mixed" | "track";
 
@@ -30,7 +30,17 @@ export interface DraftReviewLite {
   original_language?: string | null;
   cleaned_at?: string | null;
   ai_suggestions?: any;
+  media_urls?: string[] | null;
   models: { id: string; name: string; brands: { id: string; name: string } | null } | null;
+}
+
+interface DetectCandidate {
+  brand: string;
+  model: string;
+  confidence: number | null;
+  reason: string | null;
+  brandMatch: { id: string; name: string } | null;
+  modelMatch: { id: string; name: string; image_url?: string | null } | null;
 }
 
 interface Props {
@@ -56,6 +66,8 @@ export function EditDraftDialog({ draft, open, onOpenChange, onSaved }: Props) {
   const [results, setResults] = useState<any[]>([]);
   const [saving, setSaving] = useState(false);
   const [cleaning, setCleaning] = useState(false);
+  const [detecting, setDetecting] = useState(false);
+  const [detected, setDetected] = useState<DetectCandidate[] | null>(null);
 
   useEffect(() => {
     if (!draft) return;
@@ -76,6 +88,7 @@ export function EditDraftDialog({ draft, open, onOpenChange, onSaved }: Props) {
     );
     setSearch("");
     setResults([]);
+    setDetected(null);
   }, [draft]);
 
   useEffect(() => {
@@ -123,6 +136,64 @@ export function EditDraftDialog({ draft, open, onOpenChange, onSaved }: Props) {
     if (!confirm("Replace cleaned content with the raw transcript?")) return;
     setContent(rawTranscript);
   };
+
+  const detectShoe = async () => {
+    const photo = draft?.media_urls?.[0];
+    if (!photo) { toast.error("No photo on this review"); return; }
+    setDetecting(true);
+    setDetected(null);
+    try {
+      const { data, error } = await supabase.functions.invoke("identify-shoe-from-image", {
+        body: { imageUrl: photo, topK: 3 },
+      });
+      if (error) throw error;
+      const cands: DetectCandidate[] = Array.isArray(data?.candidates) ? data.candidates : [];
+      if (!cands.length) { toast.error("Couldn't identify a shoe from this photo"); return; }
+      setDetected(cands);
+    } catch (e: any) {
+      toast.error(e.message || "Detection failed");
+    } finally {
+      setDetecting(false);
+    }
+  };
+
+  const pickDetected = async (c: DetectCandidate) => {
+    try {
+      let brandId = c.brandMatch?.id ?? null;
+      let brandName = c.brandMatch?.name ?? c.brand;
+      if (!brandId && c.brand) {
+        const { data: existing } = await supabase.from("brands").select("id, name").ilike("name", c.brand).maybeSingle();
+        if (existing) { brandId = existing.id; brandName = existing.name; }
+        else {
+          const { data: nb, error } = await supabase.from("brands").insert({ name: c.brand }).select("id, name").single();
+          if (error) throw error;
+          brandId = nb.id; brandName = nb.name;
+        }
+      }
+      let modelMatchId = c.modelMatch?.id ?? null;
+      let modelName = c.modelMatch?.name ?? c.model;
+      if (!modelMatchId && brandId && c.model) {
+        const { data: existingM } = await supabase.from("models")
+          .select("id, name").eq("brand_id", brandId).ilike("name", c.model).maybeSingle();
+        if (existingM) { modelMatchId = existingM.id; modelName = existingM.name; }
+        else {
+          const { data: nm, error } = await supabase.from("models")
+            .insert({ name: c.model, brand_id: brandId, pending_review: true })
+            .select("id, name").single();
+          if (error) throw error;
+          modelMatchId = nm.id; modelName = nm.name;
+        }
+      }
+      if (!modelMatchId) { toast.error("Couldn't resolve a model"); return; }
+      setModelId(modelMatchId);
+      setShoeLabel(`${brandName || "—"} · ${modelName}`);
+      setDetected(null);
+      toast.success("Shoe assigned — remember to Save");
+    } catch (e: any) {
+      toast.error(e.message || "Couldn't assign shoe");
+    }
+  };
+
 
   const save = async () => {
     if (!draft) return;
@@ -195,6 +266,58 @@ export function EditDraftDialog({ draft, open, onOpenChange, onSaved }: Props) {
                     className="block w-full text-left text-sm px-3 py-2 hover:bg-muted"
                   >
                     {r.brand?.name || "—"} · {r.name}
+                  </button>
+                ))}
+              </div>
+            )}
+            {draft?.media_urls && draft.media_urls.length > 0 && (
+              <div className="pt-1">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-8 rounded-none text-xs uppercase tracking-wider"
+                  onClick={detectShoe}
+                  disabled={detecting}
+                >
+                  {detecting ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <Camera className="h-3 w-3 mr-1" />}
+                  Detect shoe from photo
+                </Button>
+              </div>
+            )}
+            {detected && detected.length > 0 && (
+              <div className="border border-border divide-y divide-border">
+                <div className="text-xs uppercase tracking-wider text-muted-foreground px-3 py-2 bg-muted">
+                  Top {detected.length} matches — pick one
+                </div>
+                {detected.map((c, i) => (
+                  <button
+                    key={i}
+                    type="button"
+                    onClick={() => pickDetected(c)}
+                    className="flex w-full items-center gap-3 text-left px-3 py-2 hover:bg-muted"
+                  >
+                    {c.modelMatch?.image_url ? (
+                      <img src={c.modelMatch.image_url} alt="" className="h-10 w-10 object-cover" />
+                    ) : (
+                      <div className="h-10 w-10 bg-muted flex items-center justify-center">
+                        <Camera className="h-4 w-4 text-muted-foreground" />
+                      </div>
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-medium truncate">
+                        {c.brand} · {c.model}
+                      </div>
+                      {c.reason && (
+                        <div className="text-xs text-muted-foreground truncate">{c.reason}</div>
+                      )}
+                    </div>
+                    <div className="text-xs tabular-nums text-muted-foreground">
+                      {c.confidence != null ? `${Math.round(c.confidence * 100)}%` : ""}
+                      {!c.modelMatch && (
+                        <span className="ml-1 uppercase">· new</span>
+                      )}
+                    </div>
                   </button>
                 ))}
               </div>
