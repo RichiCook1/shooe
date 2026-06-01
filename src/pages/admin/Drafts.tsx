@@ -237,6 +237,11 @@ export default function AdminDrafts() {
                           terrain: d.terrain,
                           distance_km: d.distance_km,
                           location: d.location,
+                          raw_transcript: d.raw_transcript,
+                          content_en: d.content_en,
+                          original_language: d.original_language,
+                          cleaned_at: d.cleaned_at,
+                          ai_suggestions: d.ai_suggestions,
                           models: d.models
                             ? { id: d.models.id, name: d.models.name, brands: d.models.brands }
                             : null,
