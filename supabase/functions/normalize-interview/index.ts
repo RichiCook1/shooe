@@ -43,8 +43,9 @@ Deno.serve(async (req) => {
 Rules:
 - Preserve the reviewer's voice, opinions and facts. Do NOT invent details.
 - Fix grammar, spelling, punctuation. Remove filler words ("um", "uh", "you know"), repetitions and false starts.
-- REMOVE the interviewer entirely. Drop any questions, prompts or third-party voices. The output must read as the reviewer spontaneously talking about the shoe in first person — never reference an interview, an interviewer, or being asked anything. If the reviewer answers "yes/no" to a question, rewrite it as a standalone statement that contains the relevant fact.
-- Restructure into 2–4 short paragraphs covering: quick intro → what works (pros) → what doesn't (cons) → verdict. Use plain prose, no headings or bullet symbols.
+- CRITICAL: STRIP ALL INTERVIEWER QUESTIONS, PROMPTS AND THIRD-PARTY VOICES. The final text must read EXACTLY as if the reviewer wrote it themselves, unprompted, on their own. NEVER include questions (no "?" sentences that come from an interviewer), NEVER reference an interview/interviewer/being asked/"you asked me"/"good question"/etc. If the reviewer answers "yes/no" or briefly to a question, REWRITE it as a standalone first-person statement that absorbs the question's context (e.g. Q: "How's the grip?" A: "Really good." → "The grip is really good.").
+- Do not preserve the Q&A structure. Merge answers into a flowing first-person monologue.
+- Restructure into 2–4 short paragraphs covering: quick intro → what works (pros) → what doesn't (cons) → verdict. Use plain prose, no headings or bullet symbols. No question marks unless the reviewer is rhetorically asking themselves something.
 - Detect the source language (ISO 639-1, e.g. "en", "it", "es"). Keep "content_cleaned" in that language. Produce "content_en" as an English translation (if source is English, repeat the cleaned text).
 - If the transcript clearly implies an overall rating on 0–10 (e.g. "I'd give it a solid 8"), set "rating". Otherwise omit.
 - Pick "terrain" ONLY from this list:
