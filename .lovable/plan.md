@@ -1,44 +1,33 @@
-## Problem
+## Plan
 
-From the job timeline + edge logs, the flow is:
+1. **Add exact product verification before saving**
+   - Update `enrich-shoe-images` so the vision check verifies:
+     - side-view product photo
+     - single shoe
+     - visible brand/branding matches the requested brand
+     - model/page context matches the requested model closely enough
+   - Require the AI response to return structured fields like `brand_match`, `model_match`, `detected_brand`, `detected_model`, and `reason`.
 
-1. Firecrawl returns candidates ✓
-2. Vision confirms side view ✓
-3. **Download/upload fails** ✗ — because the source image URL returns `403` or `404` when fetched from the edge function (e.g. `dks.scene7.com` blocks unknown UAs, some CDNs hotlink-protect).
+2. **Reject obvious page/query mismatches early**
+   - Before downloading or uploading, inspect each candidate `page_url` / `image_url` text.
+   - If the URL clearly contains another brand or another model name, log it as `candidate_rejected` and move to the next candidate.
+   - This would have rejected the On Cloudsurfer Trail URL for `The North Face Clyffe`.
 
-We currently:
-- Fetch the image in `visionConfirmSideView` by passing the **URL** to the Lovable AI gateway — gateway also gets 403 from these CDNs (`Received 403 status code when fetching image from URL`).
-- Re-fetch the same URL in `uploadToBucket` with no headers — also fails → "Failed to download/upload image" → job ends with 1 failed.
+3. **Remove unsafe fallback behavior**
+   - Do not “use first downloaded image” when all candidates fail verification.
+   - Instead mark the model as `image_status = failed` and log a clear failure: “No exact brand/model image found.”
+   - This avoids silently saving wrong shoes.
 
-We never try the next candidate when download fails, so one bad URL kills the whole model.
+4. **Improve the admin timeline UI**
+   - Show candidate preview thumbnails for `search_results`, `vision_check`, `candidate_rejected`, and failed download events.
+   - Display the AI’s detected brand/model and rejection reason inline, so it’s obvious why a candidate was accepted or rejected.
 
-## Fix
+5. **Clean up this bad record**
+   - Clear the incorrect image for `The North Face Clyffe` and set it back to `failed` or `missing`, so it can be retried safely after the stricter logic is live.
 
-### 1. Download once, with browser-like headers
-In `enrich-shoe-images/index.ts`, add `fetchImage(url)` that does `fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0 ...', 'Accept': 'image/*', 'Referer': <page_url origin> } })` and returns `{ bytes, contentType }` or `null`. Use the candidate's `page_url` host as `Referer` when available — most hotlink protections accept that.
+## Technical notes
 
-### 2. Vision check on bytes, not URL
-Convert the downloaded bytes to a base64 `data:` URL and pass that to the vision model. Eliminates the gateway-side 403/404 entirely and is faster (one fetch instead of two).
-
-### 3. Upload the already-downloaded bytes
-`uploadToBucket` takes `(modelId, bytes, contentType)` instead of re-fetching.
-
-### 4. Try next candidate on any failure
-Loop candidates: for each, attempt `fetchImage` → if null, log `download_failed` (warn) and continue. Then vision check; if rejected, continue. First candidate that downloads + passes vision wins. If none pass vision but at least one downloaded, fall back to the first downloaded one (current behaviour, but now guaranteed uploadable).
-
-### 5. Better event logging
-- `download_failed` event with status code + URL when fetch fails
-- Include final `image_url` thumbnail in the `uploaded` event (already done) — keep
-- On total failure, log which candidates were tried and why each failed
-
-## Files changed
-
-- `supabase/functions/enrich-shoe-images/index.ts` — refactor `enrichOne` per above, replace `uploadToBucket` signature, swap vision input to base64.
-
-No DB/UI changes — the existing `CatalogHealth` drawer will surface the new event types automatically.
-
-## Out of scope
-
-- Adding more search sources (still Firecrawl only)
-- Image proxy/caching service
-- Retrying entire job on partial failures
+- Main logic change: `supabase/functions/enrich-shoe-images/index.ts`.
+- UI-only visibility change: `src/pages/admin/CatalogHealth.tsx`.
+- Data correction: one update to the affected model record, no schema change needed.
+- No new database tables are required.
