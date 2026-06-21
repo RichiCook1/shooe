@@ -4,8 +4,15 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Sparkles, Check } from "lucide-react";
+import { Loader2, Sparkles, Check, SkipForward } from "lucide-react";
 import { toast } from "sonner";
+
+interface QueueInfo {
+  index: number; // 0-based
+  total: number;
+  onNext: () => void;
+  onSkip: () => void;
+}
 
 interface Props {
   reviewId: string;
@@ -14,6 +21,7 @@ interface Props {
   open: boolean;
   onOpenChange: (v: boolean) => void;
   onApplied: () => void;
+  queueInfo?: QueueInfo;
 }
 
 interface Candidate {
