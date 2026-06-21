@@ -1,33 +1,33 @@
-## Plan
+# Identify shoes from interview photos
 
-1. **Add exact product verification before saving**
-   - Update `enrich-shoe-images` so the vision check verifies:
-     - side-view product photo
-     - single shoe
-     - visible brand/branding matches the requested brand
-     - model/page context matches the requested model closely enough
-   - Require the AI response to return structured fields like `brand_match`, `model_match`, `detected_brand`, `detected_model`, and `reason`.
+Many interview drafts are attached to the `Unknown / Unidentified (needs ID)` placeholder model. They already have a photo in `media_urls[0]`. This plan adds an admin tool to identify each shoe from its photo and re-link the review to the correct model — reusing the existing `identify-shoe-from-image` and `validate-shoe-name` edge functions, with no schema changes.
 
-2. **Reject obvious page/query mismatches early**
-   - Before downloading or uploading, inspect each candidate `page_url` / `image_url` text.
-   - If the URL clearly contains another brand or another model name, log it as `candidate_rejected` and move to the next candidate.
-   - This would have rejected the On Cloudsurfer Trail URL for `The North Face Clyffe`.
+## What changes
 
-3. **Remove unsafe fallback behavior**
-   - Do not “use first downloaded image” when all candidates fail verification.
-   - Instead mark the model as `image_status = failed` and log a clear failure: “No exact brand/model image found.”
-   - This avoids silently saving wrong shoes.
+### `src/pages/admin/Drafts.tsx`
+- On each draft card that "Needs ID" (or has a photo), add a **Identify from photo** button next to *Edit*.
+- Add a top-bar **Identify all unidentified** button that processes every "Needs ID" draft sequentially with a progress toast (`3/12 identified…`), skipping ones with no photo.
 
-4. **Improve the admin timeline UI**
-   - Show candidate preview thumbnails for `search_results`, `vision_check`, `candidate_rejected`, and failed download events.
-   - Display the AI’s detected brand/model and rejection reason inline, so it’s obvious why a candidate was accepted or rejected.
+### New `src/components/admin/IdentifyShoeDialog.tsx`
+- Opens when clicking *Identify from photo* on a single draft.
+- Shows the photo plus a loading state while calling `supabase.functions.invoke("identify-shoe-from-image", { body: { imageUrl } })`.
+- Renders the top candidates returned by the function:
+  - For each candidate, show `brand · model`, confidence %, the AI's reason, and — if `modelMatch` is present — a "Use this" button that re-links the review to that catalog model.
+  - If no `modelMatch` but a `brandMatch` + free-text `model`, a "Use & create" button that calls `validate-shoe-name` (existing function) to find/create the model, then re-links.
+  - Manual fallback: a `ShoeSearch` combobox to pick any catalog model, plus free-text "brand + model" inputs that fall through to `validate-shoe-name`.
+- On confirm:
+  1. `update reviews set model_id = <newId>, content = stripped` where `content` is the existing content with `\n\n[NEEDS SHOE IDENTIFICATION]` removed.
+  2. Refresh the drafts list.
 
-5. **Clean up this bad record**
-   - Clear the incorrect image for `The North Face Clyffe` and set it back to `failed` or `missing`, so it can be retried safely after the stricter logic is live.
+### Bulk flow
+- "Identify all unidentified" iterates drafts that have a photo and currently point at the Unknown placeholder.
+- For each, calls `identify-shoe-from-image` and **auto-applies the top candidate only if** `confidence >= 0.7` AND it has a `modelMatch` (safe auto-link). Otherwise leaves the draft for manual review.
+- Shows summary toast: `Auto-identified 7 · 5 need manual review`.
 
 ## Technical notes
 
-- Main logic change: `supabase/functions/enrich-shoe-images/index.ts`.
-- UI-only visibility change: `src/pages/admin/CatalogHealth.tsx`.
-- Data correction: one update to the affected model record, no schema change needed.
-- No new database tables are required.
+- Reuses existing edge functions — no new functions, no migrations.
+- `identify-shoe-from-image` already accepts `imageUrl` and returns `candidates[]` with `brandMatch` / `modelMatch` lookups against the catalog.
+- Re-linking is a plain `reviews.update({ model_id })` — same pattern used by `merge_model_duplicates`. The old `Unidentified` placeholder model is left in place (other drafts may still reference it).
+- After all unidentified drafts are cleared, the placeholder can be deleted manually via the existing Catalog dedup/delete UI — not handled by this change.
+- No design-system changes; uses existing `Dialog`, `Card`, `Button`, `Badge`, `ShoeSearch`.
