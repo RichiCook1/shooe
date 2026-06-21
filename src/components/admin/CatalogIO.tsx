@@ -76,7 +76,7 @@ export function CatalogIO() {
       const brandRows = brandsData.map((b: any) => ({
         id: b.id, name: b.name, country: b.country ?? "", website: b.website ?? "",
       }));
-      const modelRows = (modelsRes.data ?? []).map((m: any) => ({
+      const modelRows = modelsData.map((m: any) => ({
         id: m.id,
         brand_name: m.brands?.name ?? "",
         name: m.name,
