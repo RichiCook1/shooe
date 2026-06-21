@@ -136,28 +136,49 @@ async function uploadToBucket(supabase: any, modelId: string, sourceUrl: string)
   } catch (e) { console.error("download/upload err", e); return null; }
 }
 
-async function enrichOne(supabase: any, model: any): Promise<"ok" | "failed"> {
+async function logEvent(supabase: any, jobId: string | null, modelId: string | null, modelName: string | null, stage: string, status: string, message: string, data?: any) {
+  if (!jobId) return;
+  try {
+    await supabase.from("catalog_job_events").insert({
+      job_id: jobId, model_id: modelId, model_name: modelName, stage, status, message, data: data ?? null,
+    });
+  } catch (e) { console.error("event log err", e); }
+}
+
+async function enrichOne(supabase: any, model: any, jobId: string | null): Promise<"ok" | "failed"> {
   const brand = model.brands?.name ?? "";
+  const fullName = `${brand} ${model.name}`.trim();
   await supabase.from("models").update({ image_status: "fetching" }).eq("id", model.id);
+  await logEvent(supabase, jobId, model.id, fullName, "started", "info", `Processing ${fullName}`);
 
   const candidates = await firecrawlSideViewSearch(brand, model.name);
+  await logEvent(supabase, jobId, model.id, fullName, "search_results", candidates.length ? "ok" : "warn",
+    `${candidates.length} candidate(s) from Firecrawl`,
+    { candidates: candidates.slice(0, 5).map((c) => ({ image_url: c.image_url, page_url: c.page_url, is_side_view: c.is_side_view, confidence: c.confidence })) });
+
   if (!candidates.length) {
     await supabase.from("models").update({ image_status: "failed" }).eq("id", model.id);
+    await logEvent(supabase, jobId, model.id, fullName, "failed", "error", "No candidates returned by Firecrawl");
     return "failed";
   }
 
-  // Vision re-check the top 3 candidates
   let chosen: Candidate | null = null;
   for (const c of candidates.slice(0, 3)) {
     const ok = await visionConfirmSideView(c.image_url, brand, model.name);
+    await logEvent(supabase, jobId, model.id, fullName, "vision_check", ok ? "ok" : "warn",
+      ok ? "Vision confirmed side view" : "Vision rejected (not side view)",
+      { image_url: c.image_url, page_url: c.page_url });
     if (ok) { chosen = c; break; }
   }
-  // Fallback to best-confidence candidate if none passed
-  if (!chosen) chosen = candidates[0];
+  if (!chosen) {
+    chosen = candidates[0];
+    await logEvent(supabase, jobId, model.id, fullName, "fallback", "warn", "No candidate passed vision — falling back to top result", { image_url: chosen.image_url, page_url: chosen.page_url });
+  }
 
   const stored = await uploadToBucket(supabase, model.id, chosen.image_url);
   if (!stored) {
     await supabase.from("models").update({ image_status: "failed" }).eq("id", model.id);
+    await logEvent(supabase, jobId, model.id, fullName, "failed", "error", "Failed to download/upload image", { source: chosen.image_url });
     return "failed";
   }
   await supabase.from("models").update({
@@ -165,6 +186,7 @@ async function enrichOne(supabase: any, model: any): Promise<"ok" | "failed"> {
     image_source_url: chosen.page_url ?? chosen.image_url,
     image_status: "ok",
   }).eq("id", model.id);
+  await logEvent(supabase, jobId, model.id, fullName, "uploaded", "ok", "Image saved", { image_url: stored, source_url: chosen.page_url ?? chosen.image_url });
   return "ok";
 }
 
@@ -177,6 +199,7 @@ Deno.serve(async (req) => {
 
     const { data: job } = await supabase.from("catalog_jobs")
       .insert({ job_name: "enrich-shoe-images", status: "running" }).select().single();
+    const jobId = job?.id ?? null;
 
     let ok = 0, failed = 0;
     let models: any[] = [];
@@ -193,8 +216,10 @@ Deno.serve(async (req) => {
       models = data ?? [];
     }
 
+    await logEvent(supabase, jobId, null, null, "queue", "info", `Queued ${models.length} model(s) for enrichment`);
+
     for (const m of models) {
-      const result = await enrichOne(supabase, m);
+      const result = await enrichOne(supabase, m, jobId);
       if (result === "ok") ok++; else failed++;
     }
 
@@ -207,7 +232,7 @@ Deno.serve(async (req) => {
       }).eq("id", job.id);
     }
 
-    return new Response(JSON.stringify({ ok, failed, total: models.length }), {
+    return new Response(JSON.stringify({ ok, failed, total: models.length, jobId }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (e: any) {
@@ -217,3 +242,4 @@ Deno.serve(async (req) => {
     });
   }
 });
+
