@@ -204,6 +204,19 @@ export default function AdminDrafts() {
           <AlertCircle className="h-4 w-4 mr-1" />
           Needs ID only
         </Button>
+        <Button size="sm" onClick={bulkIdentify} disabled={bulkBusy || loading}>
+          {bulkBusy ? (
+            <>
+              <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+              {bulkProgress.done}/{bulkProgress.total}
+            </>
+          ) : (
+            <>
+              <Sparkles className="h-4 w-4 mr-1" />
+              Identify all unidentified
+            </>
+          )}
+        </Button>
       </div>
 
       {loading ? (
