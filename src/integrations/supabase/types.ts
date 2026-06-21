@@ -771,6 +771,7 @@ export type Database = {
         }
         Returns: boolean
       }
+      merge_model_duplicates: { Args: { p_pairs: Json }; Returns: Json }
       show_limit: { Args: never; Returns: number }
       show_trgm: { Args: { "": string }; Returns: string[] }
     }
