@@ -116,6 +116,12 @@ export default function IdentifyShoeDialog({
     return () => clearTimeout(t);
   }, [search]);
 
+  const finishOne = () => {
+    onApplied();
+    if (queueInfo) queueInfo.onNext();
+    else onOpenChange(false);
+  };
+
   const useCandidate = async (c: Candidate, key: string) => {
     setBusyId(key);
     try {
@@ -131,8 +137,7 @@ export default function IdentifyShoeDialog({
       if (!modelId) throw new Error("Could not resolve model");
       await applyIdentification(reviewId, modelId, currentContent);
       toast.success("Identified & re-linked");
-      onApplied();
-      onOpenChange(false);
+      finishOne();
     } catch (e: any) {
       toast.error(e.message || "Failed");
     } finally {
@@ -145,8 +150,7 @@ export default function IdentifyShoeDialog({
     try {
       await applyIdentification(reviewId, modelId, currentContent);
       toast.success("Re-linked");
-      onApplied();
-      onOpenChange(false);
+      finishOne();
     } catch (e: any) {
       toast.error(e.message || "Failed");
     } finally {
@@ -168,8 +172,7 @@ export default function IdentifyShoeDialog({
       if (!data?.modelId) throw new Error("Could not create model");
       await applyIdentification(reviewId, data.modelId, currentContent);
       toast.success("Created & re-linked");
-      onApplied();
-      onOpenChange(false);
+      finishOne();
     } catch (e: any) {
       toast.error(e.message || "Failed");
     } finally {
