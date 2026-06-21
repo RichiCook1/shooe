@@ -308,6 +308,23 @@ export default function AdminDrafts() {
                       <Pencil className="h-3 w-3 mr-1" />
                       Edit
                     </Button>
+                    {d.media_urls?.[0] && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-7 px-2"
+                        onClick={() =>
+                          setIdentifying({
+                            id: d.id,
+                            photo: d.media_urls![0],
+                            content: d.content,
+                          })
+                        }
+                      >
+                        <Sparkles className="h-3 w-3 mr-1" />
+                        Identify
+                      </Button>
+                    )}
                     {d.model_id && (
                       <Button asChild variant="ghost" size="sm" className="h-7 px-2">
                         <Link to={`/model/${d.model_id}`}>
