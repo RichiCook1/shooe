@@ -4,8 +4,15 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Sparkles, Check } from "lucide-react";
+import { Loader2, Sparkles, Check, SkipForward } from "lucide-react";
 import { toast } from "sonner";
+
+interface QueueInfo {
+  index: number; // 0-based
+  total: number;
+  onNext: () => void;
+  onSkip: () => void;
+}
 
 interface Props {
   reviewId: string;
@@ -14,6 +21,7 @@ interface Props {
   open: boolean;
   onOpenChange: (v: boolean) => void;
   onApplied: () => void;
+  queueInfo?: QueueInfo;
 }
 
 interface Candidate {
@@ -65,6 +73,7 @@ export default function IdentifyShoeDialog({
   open,
   onOpenChange,
   onApplied,
+  queueInfo,
 }: Props) {
   const [loading, setLoading] = useState(false);
   const [candidates, setCandidates] = useState<Candidate[]>([]);
@@ -107,6 +116,12 @@ export default function IdentifyShoeDialog({
     return () => clearTimeout(t);
   }, [search]);
 
+  const finishOne = () => {
+    onApplied();
+    if (queueInfo) queueInfo.onNext();
+    else onOpenChange(false);
+  };
+
   const useCandidate = async (c: Candidate, key: string) => {
     setBusyId(key);
     try {
@@ -122,8 +137,7 @@ export default function IdentifyShoeDialog({
       if (!modelId) throw new Error("Could not resolve model");
       await applyIdentification(reviewId, modelId, currentContent);
       toast.success("Identified & re-linked");
-      onApplied();
-      onOpenChange(false);
+      finishOne();
     } catch (e: any) {
       toast.error(e.message || "Failed");
     } finally {
@@ -136,8 +150,7 @@ export default function IdentifyShoeDialog({
     try {
       await applyIdentification(reviewId, modelId, currentContent);
       toast.success("Re-linked");
-      onApplied();
-      onOpenChange(false);
+      finishOne();
     } catch (e: any) {
       toast.error(e.message || "Failed");
     } finally {
@@ -159,8 +172,7 @@ export default function IdentifyShoeDialog({
       if (!data?.modelId) throw new Error("Could not create model");
       await applyIdentification(reviewId, data.modelId, currentContent);
       toast.success("Created & re-linked");
-      onApplied();
-      onOpenChange(false);
+      finishOne();
     } catch (e: any) {
       toast.error(e.message || "Failed");
     } finally {
@@ -172,8 +184,13 @@ export default function IdentifyShoeDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="rounded-none border-border max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle className="font-display uppercase tracking-wider text-lg">
-            Identify shoe from photo
+          <DialogTitle className="font-display uppercase tracking-wider text-lg flex items-center justify-between gap-3">
+            <span>Identify shoe from photo</span>
+            {queueInfo && (
+              <span className="text-xs font-sans normal-case tracking-normal text-muted-foreground">
+                {queueInfo.index + 1} of {queueInfo.total}
+              </span>
+            )}
           </DialogTitle>
         </DialogHeader>
 
@@ -183,6 +200,13 @@ export default function IdentifyShoeDialog({
             alt="Shoe"
             className="w-full max-h-64 object-contain bg-muted border border-border"
           />
+          {queueInfo && (
+            <div className="flex justify-end">
+              <Button variant="outline" size="sm" onClick={queueInfo.onSkip}>
+                <SkipForward className="h-3 w-3 mr-1" /> Skip
+              </Button>
+            </div>
+          )}
 
           {loading ? (
             <div className="flex items-center gap-2 text-sm text-muted-foreground py-6 justify-center">

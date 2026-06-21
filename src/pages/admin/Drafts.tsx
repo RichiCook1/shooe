@@ -41,7 +41,8 @@ export default function AdminDrafts() {
   const [filter, setFilter] = useState("");
   const [onlyNeedsId, setOnlyNeedsId] = useState(false);
   const [editing, setEditing] = useState<DraftReviewLite | null>(null);
-  const [identifying, setIdentifying] = useState<{ id: string; photo: string; content: string | null } | null>(null);
+  const [identifyQueue, setIdentifyQueue] = useState<{ id: string; photo: string; content: string | null }[]>([]);
+  const [identifyIndex, setIdentifyIndex] = useState(0);
   const [bulkBusy, setBulkBusy] = useState(false);
   const [bulkProgress, setBulkProgress] = useState({ done: 0, total: 0 });
   const [cleanBusy, setCleanBusy] = useState(false);
@@ -387,13 +388,27 @@ export default function AdminDrafts() {
                         variant="outline"
                         size="sm"
                         className="h-7 px-2"
-                        onClick={() =>
-                          setIdentifying({
-                            id: d.id,
-                            photo: d.media_urls![0],
-                            content: d.content,
-                          })
-                        }
+                        onClick={() => {
+                          const needsList = drafts.filter(
+                            (x) =>
+                              x.media_urls?.[0] &&
+                              ((x.content || "").includes("[NEEDS SHOE IDENTIFICATION]") ||
+                                x.models?.brands?.name?.toLowerCase() === "unknown")
+                          );
+                          const queue = needsList.length
+                            ? needsList.map((x) => ({
+                                id: x.id,
+                                photo: x.media_urls![0],
+                                content: x.content,
+                              }))
+                            : [{ id: d.id, photo: d.media_urls![0], content: d.content }];
+                          const startIdx = Math.max(
+                            0,
+                            queue.findIndex((q) => q.id === d.id)
+                          );
+                          setIdentifyQueue(queue);
+                          setIdentifyIndex(startIdx);
+                        }}
                       >
                         <Sparkles className="h-3 w-3 mr-1" />
                         Identify
@@ -431,14 +446,47 @@ export default function AdminDrafts() {
         onSaved={load}
       />
 
-      {identifying && (
+      {identifyQueue[identifyIndex] && (
         <IdentifyShoeDialog
-          reviewId={identifying.id}
-          photoUrl={identifying.photo}
-          currentContent={identifying.content}
-          open={!!identifying}
-          onOpenChange={(v) => !v && setIdentifying(null)}
-          onApplied={load}
+          key={identifyQueue[identifyIndex].id}
+          reviewId={identifyQueue[identifyIndex].id}
+          photoUrl={identifyQueue[identifyIndex].photo}
+          currentContent={identifyQueue[identifyIndex].content}
+          open={true}
+          onOpenChange={(v) => {
+            if (!v) {
+              setIdentifyQueue([]);
+              setIdentifyIndex(0);
+              load();
+            }
+          }}
+          onApplied={() => {}}
+          queueInfo={
+            identifyQueue.length > 1
+              ? {
+                  index: identifyIndex,
+                  total: identifyQueue.length,
+                  onNext: () => {
+                    if (identifyIndex + 1 < identifyQueue.length) {
+                      setIdentifyIndex(identifyIndex + 1);
+                    } else {
+                      setIdentifyQueue([]);
+                      setIdentifyIndex(0);
+                      load();
+                    }
+                  },
+                  onSkip: () => {
+                    if (identifyIndex + 1 < identifyQueue.length) {
+                      setIdentifyIndex(identifyIndex + 1);
+                    } else {
+                      setIdentifyQueue([]);
+                      setIdentifyIndex(0);
+                      load();
+                    }
+                  },
+                }
+              : undefined
+          }
         />
       )}
     </div>
