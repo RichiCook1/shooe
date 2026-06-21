@@ -109,9 +109,19 @@ function bytesToDataUrl(bytes: Uint8Array, contentType: string): string {
   return `data:${contentType};base64,${btoa(bin)}`;
 }
 
-async function visionConfirmSideView(dataUrl: string, brand: string, model: string): Promise<boolean> {
+interface VisionVerdict {
+  side_view: boolean;
+  single_shoe: boolean;
+  brand_match: boolean;
+  model_match: boolean;
+  detected_brand: string | null;
+  detected_model: string | null;
+  reason: string;
+}
+
+async function visionVerify(dataUrl: string, brand: string, model: string): Promise<VisionVerdict | null> {
   const LOVABLE = Deno.env.get("LOVABLE_API_KEY");
-  if (!LOVABLE) return true;
+  if (!LOVABLE) return null;
   try {
     const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
@@ -119,22 +129,46 @@ async function visionConfirmSideView(dataUrl: string, brand: string, model: stri
       body: JSON.stringify({
         model: "google/gemini-3-flash-preview",
         messages: [
-          { role: "system", content: 'You verify shoe product photos. Reply with strict JSON: {"side_view": boolean, "single_shoe": boolean, "clean_background": boolean}. side_view=true only if pure lateral profile (toe points left or right, full silhouette, NOT 3/4, NOT top-down, NOT worn).' },
+          { role: "system", content: 'You verify shoe product photos. Reply with STRICT JSON ONLY (no prose) matching: {"side_view": boolean, "single_shoe": boolean, "brand_match": boolean, "model_match": boolean, "detected_brand": string|null, "detected_model": string|null, "reason": string}. side_view=true only if pure lateral profile (toe left/right, full silhouette, NOT 3/4, NOT top-down, NOT worn). brand_match=true only if visible branding/logo on the shoe matches the requested brand. model_match=true only if the silhouette/colorway is consistent with the requested model (use general knowledge of the model). Be strict — if unsure, return false.' },
           { role: "user", content: [
-            { type: "text", text: `Is this a clean side-view product photo of the ${brand} ${model} shoe?` },
+            { type: "text", text: `Verify this image is the ${brand} ${model} running shoe (side view). Requested brand: "${brand}". Requested model: "${model}".` },
             { type: "image_url", image_url: { url: dataUrl } },
           ] },
         ],
       }),
     });
-    if (!res.ok) { console.error("vision check failed", res.status, await res.text().catch(() => "")); return true; }
+    if (!res.ok) { console.error("vision check failed", res.status, await res.text().catch(() => "")); return null; }
     const data = await res.json();
     const text: string = data?.choices?.[0]?.message?.content ?? "";
     const match = text.match(/\{[\s\S]*\}/);
-    if (!match) return false;
-    const parsed = JSON.parse(match[0]);
-    return Boolean(parsed.side_view && parsed.single_shoe);
-  } catch (e) { console.error("vision err", e); return true; }
+    if (!match) return null;
+    const p = JSON.parse(match[0]);
+    return {
+      side_view: Boolean(p.side_view),
+      single_shoe: Boolean(p.single_shoe),
+      brand_match: Boolean(p.brand_match),
+      model_match: Boolean(p.model_match),
+      detected_brand: p.detected_brand ?? null,
+      detected_model: p.detected_model ?? null,
+      reason: typeof p.reason === "string" ? p.reason : "",
+    };
+  } catch (e) { console.error("vision err", e); return null; }
+}
+
+// Heuristic: reject candidate URLs that obviously belong to a different brand/model.
+// Returns null if OK, or a string reason if it should be rejected.
+function urlMismatchReason(brand: string, model: string, pageUrl: string | null, imageUrl: string): string | null {
+  const haystack = `${pageUrl ?? ""} ${imageUrl}`.toLowerCase();
+  const brandTokens = brand.toLowerCase().split(/\s+/).filter((t) => t.length >= 3 && t !== "the");
+  const modelTokens = model.toLowerCase().split(/\s+/).filter((t) => t.length >= 3);
+  const brandHit = brandTokens.length === 0 || brandTokens.some((t) => haystack.includes(t));
+  const modelHit = modelTokens.length === 0 || modelTokens.some((t) => haystack.includes(t));
+  // Known competing brands to detect explicit conflicts
+  const COMPETING = ["nike","adidas","asics","brooks","hoka","saucony","newbalance","new-balance","mizuno","altra","puma","reebok","salomon","merrell","scarpa","lasportiva","la-sportiva","onrunning","on-running","oncloud","cloudsurfer","cloudmonster","cloudflyer","ghost","clifton","bondi","kayano","nimbus","novablast","pegasus","vaporfly","alphafly","glycerin","cumulus","speedgoat","mafate","torin","lone-peak","jackal","speedcross","sense-ride"];
+  const competing = COMPETING.filter((c) => haystack.includes(c) && !brandTokens.some((b) => c.includes(b)) && !modelTokens.some((m) => c.includes(m)));
+  if (!brandHit && competing.length) return `URL mentions competing terms [${competing.join(", ")}] and not "${brand}"`;
+  if (!brandHit && !modelHit) return `URL contains neither brand nor model tokens`;
+  return null;
 }
 
 async function uploadBytes(supabase: any, modelId: string, bytes: Uint8Array, contentType: string): Promise<string | null> {
