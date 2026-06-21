@@ -13,6 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { CatalogIO } from "@/components/admin/CatalogIO";
+import { CatalogDedup } from "@/components/admin/CatalogDedup";
 
 const PAGE_SIZE = 50;
 
