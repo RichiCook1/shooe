@@ -388,13 +388,27 @@ export default function AdminDrafts() {
                         variant="outline"
                         size="sm"
                         className="h-7 px-2"
-                        onClick={() =>
-                          setIdentifying({
-                            id: d.id,
-                            photo: d.media_urls![0],
-                            content: d.content,
-                          })
-                        }
+                        onClick={() => {
+                          const needsList = drafts.filter(
+                            (x) =>
+                              x.media_urls?.[0] &&
+                              ((x.content || "").includes("[NEEDS SHOE IDENTIFICATION]") ||
+                                x.models?.brands?.name?.toLowerCase() === "unknown")
+                          );
+                          const queue = needsList.length
+                            ? needsList.map((x) => ({
+                                id: x.id,
+                                photo: x.media_urls![0],
+                                content: x.content,
+                              }))
+                            : [{ id: d.id, photo: d.media_urls![0], content: d.content }];
+                          const startIdx = Math.max(
+                            0,
+                            queue.findIndex((q) => q.id === d.id)
+                          );
+                          setIdentifyQueue(queue);
+                          setIdentifyIndex(startIdx);
+                        }}
                       >
                         <Sparkles className="h-3 w-3 mr-1" />
                         Identify
