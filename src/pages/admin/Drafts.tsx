@@ -99,6 +99,45 @@ export default function AdminDrafts() {
     load();
   }, []);
 
+  const bulkIdentify = async () => {
+    const targets = drafts.filter(
+      (d) =>
+        d.media_urls?.[0] &&
+        ((d.content || "").includes("[NEEDS SHOE IDENTIFICATION]") ||
+          d.models?.brands?.name?.toLowerCase() === "unknown")
+    );
+    if (!targets.length) {
+      toast.info("Nothing to identify");
+      return;
+    }
+    if (!confirm(`Auto-identify ${targets.length} drafts? Only high-confidence catalog matches are auto-applied.`)) return;
+    setBulkBusy(true);
+    setBulkProgress({ done: 0, total: targets.length });
+    let auto = 0;
+    let manual = 0;
+    let failed = 0;
+    for (let i = 0; i < targets.length; i++) {
+      const d = targets[i];
+      try {
+        const cands = await identifyFromUrl(d.media_urls![0]);
+        const top = cands[0];
+        if (top && top.modelMatch?.id && (top.confidence ?? 0) >= 0.7) {
+          await applyIdentification(d.id, top.modelMatch.id, d.content);
+          auto++;
+        } else {
+          manual++;
+        }
+      } catch (e) {
+        console.error(e);
+        failed++;
+      }
+      setBulkProgress({ done: i + 1, total: targets.length });
+    }
+    setBulkBusy(false);
+    toast.success(`Auto-identified ${auto} · ${manual} need manual review · ${failed} failed`);
+    load();
+  };
+
   const remove = async (id: string) => {
     if (!confirm("Delete this draft?")) return;
     const { error } = await supabase.from("reviews").delete().eq("id", id);
