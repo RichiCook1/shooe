@@ -1,28 +1,40 @@
-# Side-view shoe images
+## Goal
 
-## 1. Schema
-Migration on `public.models`:
-- Add `image_source_url text` — original page URL we found the image on.
-- (Keep existing `image_url`, `image_status`.)
+Make the "Enrich shoe images" run observable so you can see which models are being processed, which candidates were found, and where it fails.
 
-## 2. Edge function: `enrich-shoe-images`
-Rewrite the Firecrawl search to strongly prefer lateral/side-profile product shots:
+## Changes
 
-- **Search query**: `"{brand} {model}" running shoe side view lateral profile product image -review -reddit -youtube`, with a domain preference toward brand sites and major retailers (e.g. brand.com, runningwarehouse.com, roadrunnersports.com, fleetfeet.com, zappos.com, dickssportinggoods.com).
-- **Top 5 results** instead of 3, each scraped with two formats:
-  - `screenshot` (skip — too heavy), and
-  - `json` with a stricter prompt:
-    > "Return the URL of the single best product image that shows the shoe from a pure lateral/side view (full profile, toe pointing left or right, entire shoe visible, plain/white background, no model wearing it, no angled 3/4 view). Also return the page URL. JSON: {\"image_url\": string|null, \"page_url\": string|null, \"is_side_view\": boolean, \"confidence\": number}"
-- **Selection**: filter to `is_side_view === true`, sort by `confidence` desc, take the first. Fallback to highest confidence if none pass.
-- **Vision re-check** (cheap pass): before uploading, send the candidate image to Lovable AI (`google/gemini-3-flash-preview`) with a prompt asking it to confirm "true side/lateral profile of a single shoe on plain background". If it returns false, skip to the next candidate. Cap at 3 vision checks per model to control cost.
-- **Persist**: upload the chosen image to the `shoe-photos` bucket (existing logic) and update `models` with `image_url`, `image_source_url` (the `page_url`), and `image_status = 'ok'`.
-- Mark `failed` if no candidate passes the vision check.
+### 1. Edge function: stream progress to the DB
 
-## 3. No UI changes
-The existing Catalog Health admin page already triggers the enrichment job — no new buttons needed in this pass. The selection is fully automatic.
+Extend `supabase/functions/enrich-shoe-images/index.ts` so every model write also logs to a new `catalog_job_events` table:
+- `started` — model id + name being processed
+- `search_results` — number of Firecrawl candidates + first 3 page URLs
+- `vision_check` — candidate URL + pass/fail + reason
+- `uploaded` — final image_url + image_source_url
+- `failed` — error message
 
-## Technical details
-- Files: `supabase/functions/enrich-shoe-images/index.ts` (rewrite), one new migration.
-- Models: Lovable AI `google/gemini-3-flash-preview` for the vision re-check (multimodal, cheap).
-- Secrets used: `FIRECRAWL_API_KEY`, `LOVABLE_API_KEY` (both already configured).
-- No breaking changes to callers (`{ modelId }` or `{ limit }` signature unchanged).
+Also: link each event to its `catalog_jobs.id` and stamp timestamps.
+
+### 2. New table `catalog_job_events`
+
+Columns: `job_id` (fk), `model_id`, `model_name`, `stage` (text), `status` (`info`/`ok`/`warn`/`error`), `message`, `data` (jsonb), `created_at`. Admin-only RLS read; service role writes.
+
+### 3. Admin UI: live job inspector
+
+On `src/pages/admin/CatalogHealth.tsx`:
+- Each row in "Recent Jobs" becomes clickable → opens a drawer/dialog "Job details"
+- Drawer shows a live-polling timeline (refetch every 2s while job `status = running`) grouped by model:
+  - Model name + thumbnail of chosen image
+  - Sub-rows for each event with colored status dot, stage, message, and expandable JSON (`data`) for the Firecrawl payload / vision reply
+- A "Run on single model" input (model id or search) that calls `enrich-shoe-images` with `{ modelId }` so you can test one shoe at a time and watch it stream.
+
+### 4. Diagnostics surfaced in the toast
+
+When the function returns, the existing toast shows `ok / failed / total`. Add the `job.id` to the response so the UI auto-opens the new drawer for that job.
+
+## Technical notes
+
+- Polling via React Query `refetchInterval` keyed off job status — stops once job is `completed`/`completed_with_errors`.
+- Events are append-only; no migration on `catalog_jobs` itself.
+- Keeps the existing function contract; only adds observability.
+- No changes to the user-facing app, admin only.
