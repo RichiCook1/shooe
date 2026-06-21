@@ -186,16 +186,38 @@ function EventRow({ ev }: { ev: any }) {
     ev.status === "ok" ? "bg-green-500" :
     ev.status === "error" ? "bg-red-500" :
     ev.status === "warn" ? "bg-yellow-500" : "bg-muted-foreground";
+  const d = ev.data ?? {};
+  const verdict = d.verdict;
+  const thumbs: string[] = Array.isArray(d.candidates)
+    ? d.candidates.map((c: any) => c.image_url).filter(Boolean)
+    : d.image_url ? [d.image_url] : [];
   return (
     <div className="p-3 text-xs">
       <button onClick={() => ev.data && setOpen(!open)} className="w-full flex items-start gap-2 text-left">
-        <span className={`mt-1 w-2 h-2 rounded-full ${color}`} />
-        <div className="flex-1">
+        <span className={`mt-1 w-2 h-2 rounded-full ${color} shrink-0`} />
+        <div className="flex-1 min-w-0">
           <div className="flex justify-between gap-2">
             <span className="font-medium uppercase tracking-wider">{ev.stage}</span>
             <span className="text-muted-foreground">{new Date(ev.created_at).toLocaleTimeString()}</span>
           </div>
-          {ev.message && <div className="text-muted-foreground mt-0.5">{ev.message}</div>}
+          {ev.message && <div className="text-muted-foreground mt-0.5 break-words">{ev.message}</div>}
+          {verdict && (
+            <div className="mt-1 text-[10px] text-muted-foreground">
+              detected: <span className="font-mono">{verdict.detected_brand ?? "?"} / {verdict.detected_model ?? "?"}</span>
+              {" — "}
+              brand:{String(verdict.brand_match)} · model:{String(verdict.model_match)} · side:{String(verdict.side_view)}
+            </div>
+          )}
+          {thumbs.length > 0 && (
+            <div className="mt-2 flex gap-1 flex-wrap">
+              {thumbs.slice(0, 5).map((u, i) => (
+                <a key={i} href={d.page_url ?? u} target="_blank" rel="noreferrer">
+                  <img src={u} alt="" className="w-14 h-14 object-cover border border-border" />
+                </a>
+              ))}
+            </div>
+          )}
+          {d.page_url && <a href={d.page_url} target="_blank" rel="noreferrer" className="block mt-1 text-[10px] underline truncate">{d.page_url}</a>}
         </div>
       </button>
       {open && ev.data && (
