@@ -12,6 +12,7 @@ import { Trash2, CheckCircle2, RefreshCw, Sparkles, Image as ImageIcon, Plus } f
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
+import { CatalogIO } from "@/components/admin/CatalogIO";
 
 const PAGE_SIZE = 50;
 
@@ -238,6 +239,7 @@ export default function AdminCatalog() {
             </DialogContent>
           </Dialog>
 
+          <CatalogIO />
           <Button variant="outline" onClick={runSeed} className="rounded-none gap-2"><Sparkles className="w-4 h-4" /> Seed Brands</Button>
           <Button variant="outline" onClick={runDiscover} className="rounded-none gap-2"><RefreshCw className="w-4 h-4" /> Discover</Button>
         </div>
