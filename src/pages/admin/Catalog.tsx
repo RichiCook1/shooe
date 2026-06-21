@@ -253,6 +253,7 @@ export default function AdminCatalog() {
 
           <CatalogIO />
           <CatalogDedup />
+          <CatalogCleanNames />
           <Button variant="outline" onClick={runSeed} className="rounded-none gap-2"><Sparkles className="w-4 h-4" /> Seed Brands</Button>
           <Button variant="outline" onClick={runDiscover} className="rounded-none gap-2"><RefreshCw className="w-4 h-4" /> Discover</Button>
         </div>
