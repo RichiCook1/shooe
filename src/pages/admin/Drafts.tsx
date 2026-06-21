@@ -356,6 +356,17 @@ export default function AdminDrafts() {
         onOpenChange={(v) => !v && setEditing(null)}
         onSaved={load}
       />
+
+      {identifying && (
+        <IdentifyShoeDialog
+          reviewId={identifying.id}
+          photoUrl={identifying.photo}
+          currentContent={identifying.content}
+          open={!!identifying}
+          onOpenChange={(v) => !v && setIdentifying(null)}
+          onApplied={load}
+        />
+      )}
     </div>
   );
 }
