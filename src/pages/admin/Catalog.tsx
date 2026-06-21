@@ -14,6 +14,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, Dialog
 import { Label } from "@/components/ui/label";
 import { CatalogIO } from "@/components/admin/CatalogIO";
 import { CatalogDedup } from "@/components/admin/CatalogDedup";
+import { CatalogCleanNames } from "@/components/admin/CatalogCleanNames";
 
 const PAGE_SIZE = 50;
 
