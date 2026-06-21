@@ -104,35 +104,30 @@ export function CatalogDedup() {
     if (!groups.length) return;
     if (!confirm(`Merge ${groups.length} groups? Reviews will be re-linked to the keeper and duplicates deleted.`)) return;
     setBusy(true);
-    let merged = 0, errors = 0;
     try {
-      for (const g of groups) {
-        const dupeIds = g.dupes.map((d) => d.id);
-        // Re-link reviews
-        const { error: rErr } = await supabase
-          .from("reviews")
-          .update({ model_id: g.keeper.id })
-          .in("model_id", dupeIds);
-        if (rErr) { errors++; console.error("review relink", rErr); continue; }
-        // If keeper missing image, take one from a dupe
-        if (!g.keeper.image_url) {
-          const donor = g.dupes.find((d) => d.image_url);
-          if (donor) {
-            await supabase.from("models").update({ image_url: donor.image_url }).eq("id", g.keeper.id);
-          }
-        }
-        const { error: dErr } = await supabase.from("models").delete().in("id", dupeIds);
-        if (dErr) { errors++; console.error("delete dupes", dErr); continue; }
-        merged++;
+      const chunkSize = 50;
+      let merged = 0;
+      for (let i = 0; i < groups.length; i += chunkSize) {
+        const chunk = groups.slice(i, i + chunkSize).map((g) => ({
+          keeper: g.keeper.id,
+          dupes: g.dupes.map((d) => d.id),
+        }));
+        const { data, error } = await supabase.rpc("merge_model_duplicates", { p_pairs: chunk as any });
+        if (error) throw error;
+        merged += (data as any)?.merged ?? chunk.length;
+        toast.info(`Merged ${merged}/${groups.length}...`);
       }
-      qc.invalidateQueries({ queryKey: ["admin-models"] });
-      toast.success(`Merged ${merged} group(s)${errors ? `, ${errors} error(s)` : ""}`);
+      toast.success(`Merged ${merged} group(s)`);
       setOpen(false);
       setGroups([]);
+      qc.invalidateQueries({ queryKey: ["admin-models"] });
+    } catch (e: any) {
+      toast.error(e.message ?? "Merge failed");
     } finally {
       setBusy(false);
     }
   };
+
 
   return (
     <>
