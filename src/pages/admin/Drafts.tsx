@@ -44,6 +44,8 @@ export default function AdminDrafts() {
   const [identifying, setIdentifying] = useState<{ id: string; photo: string; content: string | null } | null>(null);
   const [bulkBusy, setBulkBusy] = useState(false);
   const [bulkProgress, setBulkProgress] = useState({ done: 0, total: 0 });
+  const [cleanBusy, setCleanBusy] = useState(false);
+  const [cleanProgress, setCleanProgress] = useState({ done: 0, total: 0 });
 
   const load = async () => {
     setLoading(true);
