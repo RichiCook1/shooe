@@ -208,32 +208,43 @@ async function enrichOne(supabase: any, model: any, jobId: string | null): Promi
     return "failed";
   }
 
-  let chosen: { cand: Candidate; bytes: Uint8Array; contentType: string } | null = null;
-  let firstDownloaded: { cand: Candidate; bytes: Uint8Array; contentType: string } | null = null;
+  let chosen: { cand: Candidate; bytes: Uint8Array; contentType: string; verdict: VisionVerdict } | null = null;
+  const attempted: any[] = [];
 
   for (const c of candidates.slice(0, 5)) {
+    // 1. Cheap URL prefilter
+    const mismatch = urlMismatchReason(brand, model.name, c.page_url, c.image_url);
+    if (mismatch) {
+      attempted.push({ image_url: c.image_url, page_url: c.page_url, rejected: mismatch });
+      await logEvent(supabase, jobId, model.id, fullName, "candidate_rejected", "warn",
+        `URL mismatch: ${mismatch}`, { image_url: c.image_url, page_url: c.page_url, reason: mismatch });
+      continue;
+    }
+
+    // 2. Download
     const dl = await fetchImage(c.image_url, c.page_url);
     if ("error" in dl) {
+      attempted.push({ image_url: c.image_url, page_url: c.page_url, rejected: `download: ${dl.error}` });
       await logEvent(supabase, jobId, model.id, fullName, "download_failed", "warn", `Could not fetch image: ${dl.error}`, { image_url: c.image_url, page_url: c.page_url });
       continue;
     }
-    if (!firstDownloaded) firstDownloaded = { cand: c, bytes: dl.bytes, contentType: dl.contentType };
+
+    // 3. Strict vision verify (side view + brand + model)
     const dataUrl = bytesToDataUrl(dl.bytes, dl.contentType);
-    const ok = await visionConfirmSideView(dataUrl, brand, model.name);
+    const v = await visionVerify(dataUrl, brand, model.name);
+    const ok = !!(v && v.side_view && v.single_shoe && v.brand_match && v.model_match);
     await logEvent(supabase, jobId, model.id, fullName, "vision_check", ok ? "ok" : "warn",
-      ok ? "Vision confirmed side view" : "Vision rejected (not side view)",
-      { image_url: c.image_url, page_url: c.page_url });
-    if (ok) { chosen = { cand: c, bytes: dl.bytes, contentType: dl.contentType }; break; }
+      ok ? `Verified: ${brand} ${model.name}` : `Rejected — ${v?.reason ?? "vision call failed"}`,
+      { image_url: c.image_url, page_url: c.page_url, verdict: v });
+    if (ok && v) { chosen = { cand: c, bytes: dl.bytes, contentType: dl.contentType, verdict: v }; break; }
+    attempted.push({ image_url: c.image_url, page_url: c.page_url, rejected: v?.reason ?? "vision failed", verdict: v });
   }
 
   if (!chosen) {
-    if (!firstDownloaded) {
-      await supabase.from("models").update({ image_status: "failed" }).eq("id", model.id);
-      await logEvent(supabase, jobId, model.id, fullName, "failed", "error", "All candidate images failed to download");
-      return "failed";
-    }
-    chosen = firstDownloaded;
-    await logEvent(supabase, jobId, model.id, fullName, "fallback", "warn", "No candidate passed vision — using first downloaded image", { image_url: chosen.cand.image_url, page_url: chosen.cand.page_url });
+    await supabase.from("models").update({ image_status: "failed" }).eq("id", model.id);
+    await logEvent(supabase, jobId, model.id, fullName, "failed", "error",
+      "No candidate image passed strict brand+model verification", { attempted });
+    return "failed";
   }
 
   const stored = await uploadBytes(supabase, model.id, chosen.bytes, chosen.contentType);
