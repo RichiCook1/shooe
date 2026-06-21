@@ -37,21 +37,46 @@ export function CatalogIO() {
   const fileRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
 
+  const fetchAll = async <T,>(
+    table: "brands" | "models",
+    select: string,
+    orderCol: string,
+  ): Promise<T[]> => {
+    const pageSize = 1000;
+    const all: T[] = [];
+    let from = 0;
+    while (true) {
+      const { data, error } = await supabase
+        .from(table)
+        .select(select)
+        .order(orderCol)
+        .range(from, from + pageSize - 1);
+      if (error) throw error;
+      const rows = (data ?? []) as unknown as T[];
+      all.push(...rows);
+      if (rows.length < pageSize) break;
+      from += pageSize;
+    }
+    return all;
+  };
+
   const exportXlsx = async () => {
     setBusy(true);
     try {
       toast.info("Building export...");
-      const [brandsRes, modelsRes] = await Promise.all([
-        supabase.from("brands").select("id,name,country,website").order("name"),
-        supabase.from("models").select("id,brand_id,name,category,release_year,stack_height_mm,drop_mm,weight_g,msrp,image_url,image_source_url,verified,pending_review,source,brands(name)").order("name"),
+      const [brandsData, modelsData] = await Promise.all([
+        fetchAll<any>("brands", "id,name,country,website", "name"),
+        fetchAll<any>(
+          "models",
+          "id,brand_id,name,category,release_year,stack_height_mm,drop_mm,weight_g,msrp,image_url,image_source_url,verified,pending_review,source,brands(name)",
+          "name",
+        ),
       ]);
-      if (brandsRes.error) throw brandsRes.error;
-      if (modelsRes.error) throw modelsRes.error;
 
-      const brandRows = (brandsRes.data ?? []).map((b: any) => ({
+      const brandRows = brandsData.map((b: any) => ({
         id: b.id, name: b.name, country: b.country ?? "", website: b.website ?? "",
       }));
-      const modelRows = (modelsRes.data ?? []).map((m: any) => ({
+      const modelRows = modelsData.map((m: any) => ({
         id: m.id,
         brand_name: m.brands?.name ?? "",
         name: m.name,
