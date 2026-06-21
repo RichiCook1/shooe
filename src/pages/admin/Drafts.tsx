@@ -140,6 +140,65 @@ export default function AdminDrafts() {
     load();
   };
 
+  const bulkClean = async () => {
+    const targets = drafts.filter((d) => !d.cleaned_at && (d.raw_transcript || d.content));
+    if (!targets.length) {
+      toast.info("Nothing to clean");
+      return;
+    }
+    if (!confirm(`AI-clean ${targets.length} drafts?`)) return;
+    setCleanBusy(true);
+    setCleanProgress({ done: 0, total: targets.length });
+    let ok = 0;
+    let failed = 0;
+    for (let i = 0; i < targets.length; i++) {
+      const d = targets[i];
+      try {
+        const source = d.raw_transcript || d.content || "";
+        const needsIdSuffix = (d.content || "").includes("[NEEDS SHOE IDENTIFICATION]")
+          ? "\n\n[NEEDS SHOE IDENTIFICATION]"
+          : "";
+        const { data, error } = await supabase.functions.invoke("normalize-interview", {
+          body: { transcript: source },
+        });
+        if (error) throw error;
+        const cleaned = (data?.content_cleaned || source) + needsIdSuffix;
+        const { error: uErr } = await supabase
+          .from("reviews")
+          .update({
+            content: cleaned || null,
+            content_en: data?.content_en || null,
+            original_language: data?.language || null,
+            raw_transcript: d.raw_transcript || source,
+            cleaned_at: new Date().toISOString(),
+            rating: d.rating ?? (typeof data?.rating === "number" ? data.rating : null),
+            terrain: d.terrain ?? (data?.terrain ?? null),
+            ai_suggestions: {
+              rating: data?.rating ?? null,
+              terrain: data?.terrain ?? null,
+              tag_ids: data?.tag_ids ?? [],
+            },
+          })
+          .eq("id", d.id);
+        if (uErr) throw uErr;
+        if (Array.isArray(data?.tag_ids) && data.tag_ids.length) {
+          await supabase.from("review_tags").delete().eq("review_id", d.id);
+          await supabase
+            .from("review_tags")
+            .insert(data.tag_ids.map((tag_id: string) => ({ review_id: d.id, tag_id })));
+        }
+        ok++;
+      } catch (e) {
+        console.error(e);
+        failed++;
+      }
+      setCleanProgress({ done: i + 1, total: targets.length });
+    }
+    setCleanBusy(false);
+    toast.success(`Cleaned ${ok}${failed ? ` · ${failed} failed` : ""}`);
+    load();
+  };
+
   const remove = async (id: string) => {
     if (!confirm("Delete this draft?")) return;
     const { error } = await supabase.from("reviews").delete().eq("id", id);
