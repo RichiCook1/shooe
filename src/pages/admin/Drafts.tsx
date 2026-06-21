@@ -265,6 +265,19 @@ export default function AdminDrafts() {
           <AlertCircle className="h-4 w-4 mr-1" />
           Needs ID only
         </Button>
+        <Button size="sm" variant="outline" onClick={bulkClean} disabled={cleanBusy || loading}>
+          {cleanBusy ? (
+            <>
+              <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+              {cleanProgress.done}/{cleanProgress.total}
+            </>
+          ) : (
+            <>
+              <Sparkles className="h-4 w-4 mr-1" />
+              Clean all with AI
+            </>
+          )}
+        </Button>
         <Button size="sm" onClick={bulkIdentify} disabled={bulkBusy || loading}>
           {bulkBusy ? (
             <>
