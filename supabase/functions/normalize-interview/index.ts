@@ -121,7 +121,7 @@ Reply with ONLY a JSON object, no markdown fences, no preamble.`;
     if (!out.content_cleaned) out.content_cleaned = transcript.trim();
     if (!out.content_en) out.content_en = out.content_cleaned;
 
-    return new Response(JSON.stringify(out), {
+    return new Response(JSON.stringify({ ...out, _debug_raw: raw.slice(0, 2000) }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (e: any) {
