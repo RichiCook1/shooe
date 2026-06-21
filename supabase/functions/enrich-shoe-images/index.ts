@@ -47,7 +47,13 @@ async function firecrawlSideViewSearch(brand: string, model: string): Promise<Ca
       }),
     });
     const data = await res.json();
-    const results = data?.data ?? data?.web?.results ?? [];
+    // Firecrawl v2 search returns { data: { web: [...], images: [...] } } or { data: [...] }
+    let results: any[] = [];
+    if (Array.isArray(data?.data)) results = data.data;
+    else if (Array.isArray(data?.data?.web)) results = data.data.web;
+    else if (Array.isArray(data?.web)) results = data.web;
+    else if (Array.isArray(data?.data?.results)) results = data.data.results;
+    if (!results.length) console.log("firecrawl no results", JSON.stringify(data).slice(0, 500));
     const cands: Candidate[] = [];
     for (const r of results) {
       const j = r?.json;
