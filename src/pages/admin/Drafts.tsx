@@ -41,6 +41,9 @@ export default function AdminDrafts() {
   const [filter, setFilter] = useState("");
   const [onlyNeedsId, setOnlyNeedsId] = useState(false);
   const [editing, setEditing] = useState<DraftReviewLite | null>(null);
+  const [identifying, setIdentifying] = useState<{ id: string; photo: string; content: string | null } | null>(null);
+  const [bulkBusy, setBulkBusy] = useState(false);
+  const [bulkProgress, setBulkProgress] = useState({ done: 0, total: 0 });
 
   const load = async () => {
     setLoading(true);
