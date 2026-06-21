@@ -258,7 +258,7 @@ async function enrichOne(supabase: any, model: any, jobId: string | null): Promi
     image_source_url: chosen.cand.page_url ?? chosen.cand.image_url,
     image_status: "ok",
   }).eq("id", model.id);
-  await logEvent(supabase, jobId, model.id, fullName, "uploaded", "ok", "Image saved", { image_url: stored, source_url: chosen.cand.page_url ?? chosen.cand.image_url });
+  await logEvent(supabase, jobId, model.id, fullName, "uploaded", "ok", "Image saved", { image_url: stored, source_url: chosen.cand.page_url ?? chosen.cand.image_url, verdict: chosen.verdict });
   return "ok";
 }
 
