@@ -1,4 +1,5 @@
-// Enriches shoe models with product images. Accepts {modelId} for one shoe, or {limit} to sweep models missing images.
+// Enriches shoe models with side-view product images.
+// Accepts {modelId} for one shoe, or {limit} to sweep models missing images.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
 
 const corsHeaders = {
@@ -6,34 +7,110 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-async function findImageWithFirecrawl(brand: string, model: string, website: string | null): Promise<string | null> {
+const PREFERRED_DOMAINS = [
+  "runningwarehouse.com",
+  "roadrunnersports.com",
+  "fleetfeet.com",
+  "zappos.com",
+  "dickssportinggoods.com",
+  "rei.com",
+];
+
+interface Candidate {
+  image_url: string;
+  page_url: string | null;
+  is_side_view: boolean;
+  confidence: number;
+}
+
+async function firecrawlSideViewSearch(brand: string, model: string): Promise<Candidate[]> {
   const FIRECRAWL = Deno.env.get("FIRECRAWL_API_KEY");
-  if (!FIRECRAWL) return null;
-  // Use Firecrawl search for "<brand> <model> shoe" and ask for the first hero image
+  if (!FIRECRAWL) return [];
+  const domainBoost = PREFERRED_DOMAINS.map((d) => `site:${d}`).join(" OR ");
+  const query = `"${brand} ${model}" running shoe side view lateral profile product image -review -reddit -youtube`;
   try {
     const res = await fetch("https://api.firecrawl.dev/v2/search", {
       method: "POST",
       headers: { Authorization: `Bearer ${FIRECRAWL}`, "Content-Type": "application/json" },
       body: JSON.stringify({
-        query: `${brand} ${model} shoe official product image`,
-        limit: 3,
+        query: `${query} (${domainBoost})`,
+        limit: 5,
         scrapeOptions: {
           formats: [
-            { type: "json", prompt: 'Return the URL of the main product hero image. JSON: {"image_url": string|null}' },
+            {
+              type: "json",
+              prompt:
+                'Return the URL of the single best product image that shows the shoe from a pure lateral/side view (full profile, toe pointing left or right, entire shoe visible, plain or white background, no model wearing it, no angled 3/4 view, no top-down view). Also return the page URL. JSON: {"image_url": string|null, "page_url": string|null, "is_side_view": boolean, "confidence": number between 0 and 1}',
+            },
           ],
         },
       }),
     });
     const data = await res.json();
     const results = data?.data ?? data?.web?.results ?? [];
+    const cands: Candidate[] = [];
     for (const r of results) {
-      const url = r?.json?.image_url || r?.metadata?.ogImage;
-      if (url && typeof url === "string" && url.startsWith("http")) return url;
+      const j = r?.json;
+      const image = j?.image_url || r?.metadata?.ogImage;
+      if (!image || typeof image !== "string" || !image.startsWith("http")) continue;
+      cands.push({
+        image_url: image,
+        page_url: j?.page_url || r?.url || r?.metadata?.sourceURL || null,
+        is_side_view: Boolean(j?.is_side_view),
+        confidence: typeof j?.confidence === "number" ? j.confidence : 0.4,
+      });
     }
+    // Prefer is_side_view first, then by confidence
+    cands.sort((a, b) => {
+      if (a.is_side_view !== b.is_side_view) return a.is_side_view ? -1 : 1;
+      return b.confidence - a.confidence;
+    });
+    return cands;
   } catch (e) {
     console.error("firecrawl search err", e);
+    return [];
   }
-  return null;
+}
+
+async function visionConfirmSideView(imageUrl: string, brand: string, model: string): Promise<boolean> {
+  const LOVABLE = Deno.env.get("LOVABLE_API_KEY");
+  if (!LOVABLE) return true; // fallback: trust firecrawl
+  try {
+    const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${LOVABLE}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: "google/gemini-3-flash-preview",
+        messages: [
+          {
+            role: "system",
+            content:
+              'You verify shoe product photos. Reply with strict JSON: {"side_view": boolean, "single_shoe": boolean, "clean_background": boolean}. side_view = true only if it is a pure lateral profile (toe points left or right, full silhouette visible, NOT a 3/4 angle, NOT top-down, NOT a person wearing it).',
+          },
+          {
+            role: "user",
+            content: [
+              { type: "text", text: `Is this a clean side-view product photo of the ${brand} ${model} shoe?` },
+              { type: "image_url", image_url: { url: imageUrl } },
+            ],
+          },
+        ],
+      }),
+    });
+    if (!res.ok) {
+      console.error("vision check failed", res.status, await res.text().catch(() => ""));
+      return true; // don't block on vision errors
+    }
+    const data = await res.json();
+    const text: string = data?.choices?.[0]?.message?.content ?? "";
+    const match = text.match(/\{[\s\S]*\}/);
+    if (!match) return false;
+    const parsed = JSON.parse(match[0]);
+    return Boolean(parsed.side_view && parsed.single_shoe);
+  } catch (e) {
+    console.error("vision err", e);
+    return true;
+  }
 }
 
 async function uploadToBucket(supabase: any, modelId: string, sourceUrl: string): Promise<string | null> {
@@ -56,17 +133,32 @@ async function uploadToBucket(supabase: any, modelId: string, sourceUrl: string)
 async function enrichOne(supabase: any, model: any): Promise<"ok" | "failed"> {
   const brand = model.brands?.name ?? "";
   await supabase.from("models").update({ image_status: "fetching" }).eq("id", model.id);
-  const found = await findImageWithFirecrawl(brand, model.name, model.brands?.website ?? null);
-  if (!found) {
+
+  const candidates = await firecrawlSideViewSearch(brand, model.name);
+  if (!candidates.length) {
     await supabase.from("models").update({ image_status: "failed" }).eq("id", model.id);
     return "failed";
   }
-  const stored = await uploadToBucket(supabase, model.id, found);
+
+  // Vision re-check the top 3 candidates
+  let chosen: Candidate | null = null;
+  for (const c of candidates.slice(0, 3)) {
+    const ok = await visionConfirmSideView(c.image_url, brand, model.name);
+    if (ok) { chosen = c; break; }
+  }
+  // Fallback to best-confidence candidate if none passed
+  if (!chosen) chosen = candidates[0];
+
+  const stored = await uploadToBucket(supabase, model.id, chosen.image_url);
   if (!stored) {
     await supabase.from("models").update({ image_status: "failed" }).eq("id", model.id);
     return "failed";
   }
-  await supabase.from("models").update({ image_url: stored, image_status: "ok" }).eq("id", model.id);
+  await supabase.from("models").update({
+    image_url: stored,
+    image_source_url: chosen.page_url ?? chosen.image_url,
+    image_status: "ok",
+  }).eq("id", model.id);
   return "ok";
 }
 

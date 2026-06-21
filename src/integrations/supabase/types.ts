@@ -334,6 +334,7 @@ export type Database = {
           created_at: string
           drop_mm: number | null
           id: string
+          image_source_url: string | null
           image_status: string
           image_url: string | null
           msrp: number | null
@@ -351,6 +352,7 @@ export type Database = {
           created_at?: string
           drop_mm?: number | null
           id?: string
+          image_source_url?: string | null
           image_status?: string
           image_url?: string | null
           msrp?: number | null
@@ -368,6 +370,7 @@ export type Database = {
           created_at?: string
           drop_mm?: number | null
           id?: string
+          image_source_url?: string | null
           image_status?: string
           image_url?: string | null
           msrp?: number | null
