@@ -38,33 +38,17 @@ Deno.serve(async (req) => {
     const tagList = tags.map((t: any) => `- ${t.id} | ${t.label} (${t.type})`).join("\n");
     const terrainList = terrains.map((t) => `- ${t.value}`).join("\n");
 
-    const system = `You normalize spoken shoe-review interviews into clean, analytical written reviews structured as bullet points.
+    const system = `You normalize spoken shoe-review interviews into a clean, scannable flat bullet-point list.
 
 Rules:
 - Preserve the reviewer's facts and opinions verbatim in meaning. Do NOT invent details, specs, or context not present in the transcript.
 - Fix grammar, spelling, punctuation. Remove filler ("um", "uh", "you know"), repetitions, false starts, hedges, and small talk.
 - CRITICAL: STRIP ALL INTERVIEWER QUESTIONS, PROMPTS, AND THIRD-PARTY VOICES. The output must read as if the reviewer wrote it themselves, unprompted. NEVER include questions, NEVER reference an interview/interviewer/being asked. Absorb question context into each statement (Q: "How's the grip?" A: "Really good." → "Grip: excellent.").
-- FORMAT — analytical, scannable, bullet-point style. Use this exact markdown structure in "content_cleaned":
-
-**Overview**
-One or two short sentences: who the shoe is for and the headline takeaway.
-
-**Pros**
-- Short, punchy bullets. Lead with the attribute (Cushioning, Grip, Upper, Fit, Weight, Stability, Durability, Value, Breathability, Energy return, etc.) followed by a colon and a concise observation.
-- One idea per bullet. Keep each bullet under ~20 words.
-
-**Cons**
-- Same format. Only include bullets the transcript actually supports. If none, write "- None mentioned."
-
-**Best for**
-- Bullets describing ideal use cases / runner profile / terrain / distances / paces — only what the transcript supports.
-
-**Verdict**
-One or two sentences with the overall recommendation. No rating number here.
-
-- Do NOT invent bullets the transcript does not support. Always keep Overview and Verdict; other sections may be omitted (heading and all) only if there is literally nothing to put under them.
-- No question marks anywhere unless the reviewer was rhetorically asking themselves something.
-- Detect the source language (ISO 639-1). Keep "content_cleaned" in that language using the SAME bullet structure with translated section headings (e.g. Italian: **Panoramica**, **Pro**, **Contro**, **Ideale per**, **Verdetto**). Produce "content_en" as an English translation using the English headings above. If source is English, repeat the cleaned text.
+- FORMAT — a single flat markdown bullet list. No headings, no sections, no intro/outro paragraphs. Every meaningful piece of info from the transcript becomes its own bullet.
+- Each bullet: lead with the attribute or topic (Cushioning, Grip, Upper, Fit, Weight, Stability, Durability, Value, Breathability, Energy return, Use case, Terrain, Distance, Comparison, Verdict, etc.) followed by a colon and a concise observation. One idea per bullet. Keep each bullet under ~20 words.
+- Cover everything the reviewer says — pros, cons, neutral observations, use cases, comparisons, overall verdict. Do not drop info. Do not invent info.
+- No question marks unless the reviewer was rhetorically asking themselves something.
+- Detect the source language (ISO 639-1). Keep "content_cleaned" in that language as the bullet list. Produce "content_en" as an English translation in the same bullet format. If source is English, repeat the cleaned text.
 - If the transcript clearly implies an overall rating on 0–10 (e.g. "I'd give it a solid 8"), set "rating". Otherwise omit.
 - Pick "terrain" ONLY from this list:
 ${terrainList}
