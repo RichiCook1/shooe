@@ -1,12 +1,16 @@
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { toast } from "sonner";
-import { RefreshCw, Sparkles, Image as ImageIcon } from "lucide-react";
+import { RefreshCw, Sparkles, Image as ImageIcon, ChevronRight } from "lucide-react";
 
 export default function AdminCatalogHealth() {
+  const [openJobId, setOpenJobId] = useState<string | null>(null);
+
   const { data: stats, refetch } = useQuery({
     queryKey: ["catalog-health"],
     queryFn: async () => {
@@ -22,19 +26,29 @@ export default function AdminCatalogHealth() {
     },
   });
 
-  const { data: jobs } = useQuery({
+  const { data: jobs, refetch: refetchJobs } = useQuery({
     queryKey: ["catalog-jobs"],
     queryFn: async () => {
       const { data } = await supabase.from("catalog_jobs").select("*").order("started_at", { ascending: false }).limit(20);
       return data ?? [];
     },
+    refetchInterval: 3000,
   });
 
   const trigger = async (fn: string, label: string, body?: any) => {
     toast.info(`${label} started...`);
-    const { error } = await supabase.functions.invoke(fn, { body: body ?? {} });
-    if (error) toast.error(error.message); else toast.success(`${label} complete`);
+    const { data, error } = await supabase.functions.invoke(fn, { body: body ?? {} });
+    if (error) { toast.error(error.message); return; }
+    toast.success(`${label} complete`);
     refetch();
+    refetchJobs();
+    if (data?.jobId) setOpenJobId(data.jobId);
+  };
+
+  const enrichOneModel = async () => {
+    const id = window.prompt("Model ID to enrich:");
+    if (!id) return;
+    await trigger("enrich-shoe-images", "Image enrichment", { modelId: id.trim() });
   };
 
   const pct = (n?: number | null, d?: number | null) =>
@@ -48,6 +62,7 @@ export default function AdminCatalogHealth() {
           <Button variant="outline" onClick={() => trigger("discover-new-shoes", "Discover", { limit: 100 })} className="rounded-none gap-2"><RefreshCw className="w-4 h-4" /> Discover new</Button>
           <Button variant="outline" onClick={() => trigger("seed-brand-catalog", "Seed", {})} className="rounded-none gap-2"><Sparkles className="w-4 h-4" /> Seed brand</Button>
           <Button variant="outline" onClick={() => trigger("enrich-shoe-images", "Image enrichment", { limit: 25 })} className="rounded-none gap-2"><ImageIcon className="w-4 h-4" /> Enrich images</Button>
+          <Button variant="outline" onClick={enrichOneModel} className="rounded-none gap-2"><ImageIcon className="w-4 h-4" /> Enrich one</Button>
         </div>
       </div>
 
@@ -63,11 +78,12 @@ export default function AdminCatalogHealth() {
       <Card className="rounded-none border-border">
         <div className="p-4 border-b border-border">
           <h2 className="font-display tracking-wider uppercase">Recent Jobs</h2>
+          <p className="text-xs text-muted-foreground mt-1">Click a job to see step-by-step progress.</p>
         </div>
         <div className="divide-y divide-border">
           {jobs?.length === 0 && <p className="p-4 text-sm text-muted-foreground">No jobs yet.</p>}
           {jobs?.map((j: any) => (
-            <div key={j.id} className="p-4 flex justify-between items-center gap-4 flex-wrap">
+            <button key={j.id} onClick={() => setOpenJobId(j.id)} className="w-full p-4 flex justify-between items-center gap-4 flex-wrap text-left hover:bg-muted/50 transition-colors">
               <div>
                 <div className="font-medium">{j.job_name}</div>
                 <p className="text-xs text-muted-foreground">{new Date(j.started_at).toLocaleString()}{j.notes ? ` — ${j.notes}` : ""}</p>
@@ -76,11 +92,115 @@ export default function AdminCatalogHealth() {
                 <span>+{j.models_added}</span>
                 <span>~{j.models_updated}</span>
                 <Badge variant={j.status === "completed" ? "default" : j.status === "running" ? "secondary" : "destructive"} className="rounded-none">{j.status}</Badge>
+                <ChevronRight className="w-4 h-4 text-muted-foreground" />
               </div>
-            </div>
+            </button>
           ))}
         </div>
       </Card>
+
+      <JobDrawer jobId={openJobId} onClose={() => setOpenJobId(null)} />
+    </div>
+  );
+}
+
+function JobDrawer({ jobId, onClose }: { jobId: string | null; onClose: () => void }) {
+  const { data: job } = useQuery({
+    queryKey: ["catalog-job", jobId],
+    queryFn: async () => {
+      if (!jobId) return null;
+      const { data } = await supabase.from("catalog_jobs").select("*").eq("id", jobId).maybeSingle();
+      return data;
+    },
+    enabled: !!jobId,
+    refetchInterval: (q) => (q.state.data?.status === "running" ? 2000 : false),
+  });
+
+  const { data: events } = useQuery({
+    queryKey: ["catalog-job-events", jobId],
+    queryFn: async () => {
+      if (!jobId) return [];
+      const { data } = await supabase.from("catalog_job_events").select("*").eq("job_id", jobId).order("created_at", { ascending: true });
+      return data ?? [];
+    },
+    enabled: !!jobId,
+    refetchInterval: (q) => {
+      const last: any = (q.state.data as any[])?.slice(-1)[0];
+      // keep polling for a bit even after the job ends in case events trail
+      if (!last) return 2000;
+      const age = Date.now() - new Date(last.created_at).getTime();
+      return age < 15000 ? 2000 : false;
+    },
+  });
+
+  // group by model
+  const grouped: Record<string, any[]> = {};
+  const order: string[] = [];
+  for (const e of events ?? []) {
+    const key = e.model_id ?? "__queue__";
+    if (!grouped[key]) { grouped[key] = []; order.push(key); }
+    grouped[key].push(e);
+  }
+
+  return (
+    <Sheet open={!!jobId} onOpenChange={(o) => !o && onClose()}>
+      <SheetContent side="right" className="w-full sm:max-w-2xl overflow-y-auto">
+        <SheetHeader>
+          <SheetTitle className="font-display tracking-wider uppercase">
+            {job?.job_name ?? "Job"} {job && <Badge variant="secondary" className="ml-2 rounded-none">{job.status}</Badge>}
+          </SheetTitle>
+          {job?.notes && <p className="text-xs text-muted-foreground">{job.notes}</p>}
+        </SheetHeader>
+
+        <div className="mt-6 space-y-6">
+          {(events?.length ?? 0) === 0 && <p className="text-sm text-muted-foreground">Waiting for events…</p>}
+          {order.map((key) => {
+            const evs = grouped[key];
+            const label = key === "__queue__" ? "Queue" : evs[0]?.model_name ?? key.slice(0, 8);
+            const uploadEv = evs.find((e) => e.stage === "uploaded");
+            const thumb = uploadEv?.data?.image_url;
+            return (
+              <div key={key} className="border border-border">
+                <div className="flex items-center gap-3 p-3 border-b border-border bg-muted/30">
+                  {thumb && <img src={thumb} alt="" className="w-12 h-12 object-cover" />}
+                  <div className="flex-1">
+                    <div className="font-medium text-sm">{label}</div>
+                    {key !== "__queue__" && <div className="text-[10px] text-muted-foreground font-mono">{key}</div>}
+                  </div>
+                </div>
+                <div className="divide-y divide-border">
+                  {evs.map((e) => <EventRow key={e.id} ev={e} />)}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </SheetContent>
+    </Sheet>
+  );
+}
+
+function EventRow({ ev }: { ev: any }) {
+  const [open, setOpen] = useState(false);
+  const color =
+    ev.status === "ok" ? "bg-green-500" :
+    ev.status === "error" ? "bg-red-500" :
+    ev.status === "warn" ? "bg-yellow-500" : "bg-muted-foreground";
+  return (
+    <div className="p-3 text-xs">
+      <button onClick={() => ev.data && setOpen(!open)} className="w-full flex items-start gap-2 text-left">
+        <span className={`mt-1 w-2 h-2 rounded-full ${color}`} />
+        <div className="flex-1">
+          <div className="flex justify-between gap-2">
+            <span className="font-medium uppercase tracking-wider">{ev.stage}</span>
+            <span className="text-muted-foreground">{new Date(ev.created_at).toLocaleTimeString()}</span>
+          </div>
+          {ev.message && <div className="text-muted-foreground mt-0.5">{ev.message}</div>}
+        </div>
+      </button>
+      {open && ev.data && (
+        <pre className="mt-2 ml-4 p-2 bg-muted overflow-x-auto text-[10px] whitespace-pre-wrap break-all">{JSON.stringify(ev.data, null, 2)}</pre>
+      )}
     </div>
   );
 }
