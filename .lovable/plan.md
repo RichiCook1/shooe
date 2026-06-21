@@ -1,40 +1,44 @@
-## Goal
+## Problem
 
-Make the "Enrich shoe images" run observable so you can see which models are being processed, which candidates were found, and where it fails.
+From the job timeline + edge logs, the flow is:
 
-## Changes
+1. Firecrawl returns candidates ✓
+2. Vision confirms side view ✓
+3. **Download/upload fails** ✗ — because the source image URL returns `403` or `404` when fetched from the edge function (e.g. `dks.scene7.com` blocks unknown UAs, some CDNs hotlink-protect).
 
-### 1. Edge function: stream progress to the DB
+We currently:
+- Fetch the image in `visionConfirmSideView` by passing the **URL** to the Lovable AI gateway — gateway also gets 403 from these CDNs (`Received 403 status code when fetching image from URL`).
+- Re-fetch the same URL in `uploadToBucket` with no headers — also fails → "Failed to download/upload image" → job ends with 1 failed.
 
-Extend `supabase/functions/enrich-shoe-images/index.ts` so every model write also logs to a new `catalog_job_events` table:
-- `started` — model id + name being processed
-- `search_results` — number of Firecrawl candidates + first 3 page URLs
-- `vision_check` — candidate URL + pass/fail + reason
-- `uploaded` — final image_url + image_source_url
-- `failed` — error message
+We never try the next candidate when download fails, so one bad URL kills the whole model.
 
-Also: link each event to its `catalog_jobs.id` and stamp timestamps.
+## Fix
 
-### 2. New table `catalog_job_events`
+### 1. Download once, with browser-like headers
+In `enrich-shoe-images/index.ts`, add `fetchImage(url)` that does `fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0 ...', 'Accept': 'image/*', 'Referer': <page_url origin> } })` and returns `{ bytes, contentType }` or `null`. Use the candidate's `page_url` host as `Referer` when available — most hotlink protections accept that.
 
-Columns: `job_id` (fk), `model_id`, `model_name`, `stage` (text), `status` (`info`/`ok`/`warn`/`error`), `message`, `data` (jsonb), `created_at`. Admin-only RLS read; service role writes.
+### 2. Vision check on bytes, not URL
+Convert the downloaded bytes to a base64 `data:` URL and pass that to the vision model. Eliminates the gateway-side 403/404 entirely and is faster (one fetch instead of two).
 
-### 3. Admin UI: live job inspector
+### 3. Upload the already-downloaded bytes
+`uploadToBucket` takes `(modelId, bytes, contentType)` instead of re-fetching.
 
-On `src/pages/admin/CatalogHealth.tsx`:
-- Each row in "Recent Jobs" becomes clickable → opens a drawer/dialog "Job details"
-- Drawer shows a live-polling timeline (refetch every 2s while job `status = running`) grouped by model:
-  - Model name + thumbnail of chosen image
-  - Sub-rows for each event with colored status dot, stage, message, and expandable JSON (`data`) for the Firecrawl payload / vision reply
-- A "Run on single model" input (model id or search) that calls `enrich-shoe-images` with `{ modelId }` so you can test one shoe at a time and watch it stream.
+### 4. Try next candidate on any failure
+Loop candidates: for each, attempt `fetchImage` → if null, log `download_failed` (warn) and continue. Then vision check; if rejected, continue. First candidate that downloads + passes vision wins. If none pass vision but at least one downloaded, fall back to the first downloaded one (current behaviour, but now guaranteed uploadable).
 
-### 4. Diagnostics surfaced in the toast
+### 5. Better event logging
+- `download_failed` event with status code + URL when fetch fails
+- Include final `image_url` thumbnail in the `uploaded` event (already done) — keep
+- On total failure, log which candidates were tried and why each failed
 
-When the function returns, the existing toast shows `ok / failed / total`. Add the `job.id` to the response so the UI auto-opens the new drawer for that job.
+## Files changed
 
-## Technical notes
+- `supabase/functions/enrich-shoe-images/index.ts` — refactor `enrichOne` per above, replace `uploadToBucket` signature, swap vision input to base64.
 
-- Polling via React Query `refetchInterval` keyed off job status — stops once job is `completed`/`completed_with_errors`.
-- Events are append-only; no migration on `catalog_jobs` itself.
-- Keeps the existing function contract; only adds observability.
-- No changes to the user-facing app, admin only.
+No DB/UI changes — the existing `CatalogHealth` drawer will surface the new event types automatically.
+
+## Out of scope
+
+- Adding more search sources (still Firecrawl only)
+- Image proxy/caching service
+- Retrying entire job on partial failures
