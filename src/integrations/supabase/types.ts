@@ -41,6 +41,50 @@ export type Database = {
         }
         Relationships: []
       }
+      catalog_job_events: {
+        Row: {
+          created_at: string
+          data: Json | null
+          id: string
+          job_id: string | null
+          message: string | null
+          model_id: string | null
+          model_name: string | null
+          stage: string
+          status: string
+        }
+        Insert: {
+          created_at?: string
+          data?: Json | null
+          id?: string
+          job_id?: string | null
+          message?: string | null
+          model_id?: string | null
+          model_name?: string | null
+          stage: string
+          status?: string
+        }
+        Update: {
+          created_at?: string
+          data?: Json | null
+          id?: string
+          job_id?: string | null
+          message?: string | null
+          model_id?: string | null
+          model_name?: string | null
+          stage?: string
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "catalog_job_events_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "catalog_jobs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       catalog_jobs: {
         Row: {
           errors: Json | null
