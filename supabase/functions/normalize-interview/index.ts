@@ -94,14 +94,12 @@ Reply with ONLY a JSON object, no markdown fences, no preamble.`;
 
     const data = await res.json();
     const raw = data?.choices?.[0]?.message?.content || "{}";
-    console.log("normalize-interview raw model output:", raw.slice(0, 500));
     let parsed: any = {};
     try { parsed = JSON.parse(raw); }
     catch {
       const m = raw.match(/\{[\s\S]*\}/);
       if (m) { try { parsed = JSON.parse(m[0]); } catch { /* noop */ } }
     }
-    console.log("normalize-interview parsed keys:", Object.keys(parsed), "content_cleaned length:", typeof parsed.content_cleaned === "string" ? parsed.content_cleaned.length : "n/a");
 
     // Sanitize
     const validTerrain = new Set(terrains.map((t) => t.value));
