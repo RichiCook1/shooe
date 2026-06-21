@@ -446,14 +446,47 @@ export default function AdminDrafts() {
         onSaved={load}
       />
 
-      {identifying && (
+      {identifyQueue[identifyIndex] && (
         <IdentifyShoeDialog
-          reviewId={identifying.id}
-          photoUrl={identifying.photo}
-          currentContent={identifying.content}
-          open={!!identifying}
-          onOpenChange={(v) => !v && setIdentifying(null)}
-          onApplied={load}
+          key={identifyQueue[identifyIndex].id}
+          reviewId={identifyQueue[identifyIndex].id}
+          photoUrl={identifyQueue[identifyIndex].photo}
+          currentContent={identifyQueue[identifyIndex].content}
+          open={true}
+          onOpenChange={(v) => {
+            if (!v) {
+              setIdentifyQueue([]);
+              setIdentifyIndex(0);
+              load();
+            }
+          }}
+          onApplied={() => {}}
+          queueInfo={
+            identifyQueue.length > 1
+              ? {
+                  index: identifyIndex,
+                  total: identifyQueue.length,
+                  onNext: () => {
+                    if (identifyIndex + 1 < identifyQueue.length) {
+                      setIdentifyIndex(identifyIndex + 1);
+                    } else {
+                      setIdentifyQueue([]);
+                      setIdentifyIndex(0);
+                      load();
+                    }
+                  },
+                  onSkip: () => {
+                    if (identifyIndex + 1 < identifyQueue.length) {
+                      setIdentifyIndex(identifyIndex + 1);
+                    } else {
+                      setIdentifyQueue([]);
+                      setIdentifyIndex(0);
+                      load();
+                    }
+                  },
+                }
+              : undefined
+          }
         />
       )}
     </div>
