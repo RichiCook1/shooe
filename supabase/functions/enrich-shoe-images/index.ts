@@ -78,9 +78,40 @@ async function firecrawlSideViewSearch(brand: string, model: string): Promise<Ca
   }
 }
 
-async function visionConfirmSideView(imageUrl: string, brand: string, model: string): Promise<boolean> {
+async function fetchImage(url: string, referer?: string | null): Promise<{ bytes: Uint8Array; contentType: string } | { error: string }> {
+  try {
+    const headers: Record<string, string> = {
+      "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
+      "Accept": "image/avif,image/webp,image/apng,image/*,*/*;q=0.8",
+      "Accept-Language": "en-US,en;q=0.9",
+    };
+    if (referer) {
+      try { headers["Referer"] = new URL(referer).origin + "/"; } catch { /* noop */ }
+    }
+    const r = await fetch(url, { headers, redirect: "follow" });
+    if (!r.ok) return { error: `HTTP ${r.status}` };
+    const ct = r.headers.get("content-type") || "image/jpeg";
+    if (!ct.startsWith("image/")) return { error: `not image (${ct})` };
+    const bytes = new Uint8Array(await r.arrayBuffer());
+    if (bytes.byteLength < 1024) return { error: `too small (${bytes.byteLength}b)` };
+    return { bytes, contentType: ct };
+  } catch (e: any) {
+    return { error: e?.message ?? String(e) };
+  }
+}
+
+function bytesToDataUrl(bytes: Uint8Array, contentType: string): string {
+  let bin = "";
+  const chunk = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunk) {
+    bin += String.fromCharCode(...bytes.subarray(i, i + chunk));
+  }
+  return `data:${contentType};base64,${btoa(bin)}`;
+}
+
+async function visionConfirmSideView(dataUrl: string, brand: string, model: string): Promise<boolean> {
   const LOVABLE = Deno.env.get("LOVABLE_API_KEY");
-  if (!LOVABLE) return true; // fallback: trust firecrawl
+  if (!LOVABLE) return true;
   try {
     const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
@@ -88,52 +119,33 @@ async function visionConfirmSideView(imageUrl: string, brand: string, model: str
       body: JSON.stringify({
         model: "google/gemini-3-flash-preview",
         messages: [
-          {
-            role: "system",
-            content:
-              'You verify shoe product photos. Reply with strict JSON: {"side_view": boolean, "single_shoe": boolean, "clean_background": boolean}. side_view = true only if it is a pure lateral profile (toe points left or right, full silhouette visible, NOT a 3/4 angle, NOT top-down, NOT a person wearing it).',
-          },
-          {
-            role: "user",
-            content: [
-              { type: "text", text: `Is this a clean side-view product photo of the ${brand} ${model} shoe?` },
-              { type: "image_url", image_url: { url: imageUrl } },
-            ],
-          },
+          { role: "system", content: 'You verify shoe product photos. Reply with strict JSON: {"side_view": boolean, "single_shoe": boolean, "clean_background": boolean}. side_view=true only if pure lateral profile (toe points left or right, full silhouette, NOT 3/4, NOT top-down, NOT worn).' },
+          { role: "user", content: [
+            { type: "text", text: `Is this a clean side-view product photo of the ${brand} ${model} shoe?` },
+            { type: "image_url", image_url: { url: dataUrl } },
+          ] },
         ],
       }),
     });
-    if (!res.ok) {
-      console.error("vision check failed", res.status, await res.text().catch(() => ""));
-      return true; // don't block on vision errors
-    }
+    if (!res.ok) { console.error("vision check failed", res.status, await res.text().catch(() => "")); return true; }
     const data = await res.json();
     const text: string = data?.choices?.[0]?.message?.content ?? "";
     const match = text.match(/\{[\s\S]*\}/);
     if (!match) return false;
     const parsed = JSON.parse(match[0]);
     return Boolean(parsed.side_view && parsed.single_shoe);
-  } catch (e) {
-    console.error("vision err", e);
-    return true;
-  }
+  } catch (e) { console.error("vision err", e); return true; }
 }
 
-async function uploadToBucket(supabase: any, modelId: string, sourceUrl: string): Promise<string | null> {
+async function uploadBytes(supabase: any, modelId: string, bytes: Uint8Array, contentType: string): Promise<string | null> {
   try {
-    const r = await fetch(sourceUrl);
-    if (!r.ok) return null;
-    const ct = r.headers.get("content-type") || "image/jpeg";
-    const ext = ct.includes("png") ? "png" : ct.includes("webp") ? "webp" : "jpg";
-    const buf = new Uint8Array(await r.arrayBuffer());
+    const ext = contentType.includes("png") ? "png" : contentType.includes("webp") ? "webp" : "jpg";
     const path = `models/${modelId}.${ext}`;
-    const { error } = await supabase.storage.from("shoe-photos").upload(path, buf, {
-      contentType: ct, upsert: true,
-    });
+    const { error } = await supabase.storage.from("shoe-photos").upload(path, bytes, { contentType, upsert: true });
     if (error) { console.error("upload err", error); return null; }
     const { data } = supabase.storage.from("shoe-photos").getPublicUrl(path);
     return data.publicUrl;
-  } catch (e) { console.error("download/upload err", e); return null; }
+  } catch (e) { console.error("upload err", e); return null; }
 }
 
 async function logEvent(supabase: any, jobId: string | null, modelId: string | null, modelName: string | null, stage: string, status: string, message: string, data?: any) {
@@ -162,31 +174,46 @@ async function enrichOne(supabase: any, model: any, jobId: string | null): Promi
     return "failed";
   }
 
-  let chosen: Candidate | null = null;
-  for (const c of candidates.slice(0, 3)) {
-    const ok = await visionConfirmSideView(c.image_url, brand, model.name);
+  let chosen: { cand: Candidate; bytes: Uint8Array; contentType: string } | null = null;
+  let firstDownloaded: { cand: Candidate; bytes: Uint8Array; contentType: string } | null = null;
+
+  for (const c of candidates.slice(0, 5)) {
+    const dl = await fetchImage(c.image_url, c.page_url);
+    if ("error" in dl) {
+      await logEvent(supabase, jobId, model.id, fullName, "download_failed", "warn", `Could not fetch image: ${dl.error}`, { image_url: c.image_url, page_url: c.page_url });
+      continue;
+    }
+    if (!firstDownloaded) firstDownloaded = { cand: c, bytes: dl.bytes, contentType: dl.contentType };
+    const dataUrl = bytesToDataUrl(dl.bytes, dl.contentType);
+    const ok = await visionConfirmSideView(dataUrl, brand, model.name);
     await logEvent(supabase, jobId, model.id, fullName, "vision_check", ok ? "ok" : "warn",
       ok ? "Vision confirmed side view" : "Vision rejected (not side view)",
       { image_url: c.image_url, page_url: c.page_url });
-    if (ok) { chosen = c; break; }
-  }
-  if (!chosen) {
-    chosen = candidates[0];
-    await logEvent(supabase, jobId, model.id, fullName, "fallback", "warn", "No candidate passed vision — falling back to top result", { image_url: chosen.image_url, page_url: chosen.page_url });
+    if (ok) { chosen = { cand: c, bytes: dl.bytes, contentType: dl.contentType }; break; }
   }
 
-  const stored = await uploadToBucket(supabase, model.id, chosen.image_url);
+  if (!chosen) {
+    if (!firstDownloaded) {
+      await supabase.from("models").update({ image_status: "failed" }).eq("id", model.id);
+      await logEvent(supabase, jobId, model.id, fullName, "failed", "error", "All candidate images failed to download");
+      return "failed";
+    }
+    chosen = firstDownloaded;
+    await logEvent(supabase, jobId, model.id, fullName, "fallback", "warn", "No candidate passed vision — using first downloaded image", { image_url: chosen.cand.image_url, page_url: chosen.cand.page_url });
+  }
+
+  const stored = await uploadBytes(supabase, model.id, chosen.bytes, chosen.contentType);
   if (!stored) {
     await supabase.from("models").update({ image_status: "failed" }).eq("id", model.id);
-    await logEvent(supabase, jobId, model.id, fullName, "failed", "error", "Failed to download/upload image", { source: chosen.image_url });
+    await logEvent(supabase, jobId, model.id, fullName, "failed", "error", "Failed to upload image to bucket", { source: chosen.cand.image_url });
     return "failed";
   }
   await supabase.from("models").update({
     image_url: stored,
-    image_source_url: chosen.page_url ?? chosen.image_url,
+    image_source_url: chosen.cand.page_url ?? chosen.cand.image_url,
     image_status: "ok",
   }).eq("id", model.id);
-  await logEvent(supabase, jobId, model.id, fullName, "uploaded", "ok", "Image saved", { image_url: stored, source_url: chosen.page_url ?? chosen.image_url });
+  await logEvent(supabase, jobId, model.id, fullName, "uploaded", "ok", "Image saved", { image_url: stored, source_url: chosen.cand.page_url ?? chosen.cand.image_url });
   return "ok";
 }
 
