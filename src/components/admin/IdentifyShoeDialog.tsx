@@ -73,6 +73,7 @@ export default function IdentifyShoeDialog({
   open,
   onOpenChange,
   onApplied,
+  queueInfo,
 }: Props) {
   const [loading, setLoading] = useState(false);
   const [candidates, setCandidates] = useState<Candidate[]>([]);
