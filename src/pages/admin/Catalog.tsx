@@ -59,8 +59,18 @@ export default function AdminCatalog() {
   const { data: modelsResult } = useQuery({
     queryKey: ["admin-models", search, filter, brandFilter?.id, modelsPage],
     queryFn: async () => {
+      let brandIds: string[] = [];
+      if (search) {
+        const { data: bm } = await supabase.from("brands").select("id").ilike("name", `%${search}%`).limit(500);
+        brandIds = (bm ?? []).map((b: any) => b.id);
+      }
       let q = supabase.from("models").select("*, brands(name)", { count: "exact" }).order("created_at", { ascending: false });
-      if (search) q = q.ilike("name", `%${search}%`);
+      if (search) {
+        const escaped = search.replace(/[,()]/g, " ");
+        const ors = [`name.ilike.%${escaped}%`];
+        if (brandIds.length) ors.push(`brand_id.in.(${brandIds.join(",")})`);
+        q = q.or(ors.join(","));
+      }
       if (filter === "unverified") q = q.eq("verified", false);
       if (filter === "missing_image") q = q.is("image_url", null);
       if (filter === "pending") q = q.eq("pending_review", true);
