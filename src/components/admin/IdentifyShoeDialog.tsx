@@ -42,12 +42,21 @@ export async function applyIdentification(
 }
 
 export async function identifyFromUrl(imageUrl: string): Promise<Candidate[]> {
+  // Prefer Google Lens (via SerpAPI) — far more accurate than vision-only.
+  const lens = await supabase.functions.invoke("identify-shoe-from-lens", {
+    body: { imageUrl, topK: 4 },
+  });
+  if (!lens.error && (lens.data?.candidates as Candidate[])?.length) {
+    return lens.data.candidates as Candidate[];
+  }
+  // Fallback to vision model if Lens returns nothing.
   const { data, error } = await supabase.functions.invoke("identify-shoe-from-image", {
     body: { imageUrl, topK: 4 },
   });
   if (error) throw error;
   return (data?.candidates as Candidate[]) || [];
 }
+
 
 export default function IdentifyShoeDialog({
   reviewId,
