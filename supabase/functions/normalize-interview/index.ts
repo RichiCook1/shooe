@@ -65,11 +65,11 @@ Reply with ONLY a JSON object, no markdown fences, no preamble.`;
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
+        model: "google/gemini-3-flash-preview",
         response_format: { type: "json_object" },
         messages: [
           { role: "system", content: system },
-          { role: "user", content: `Transcript:\n"""\n${transcript.trim()}\n"""` },
+          { role: "user", content: `Transcript:\n"""\n${transcript.trim()}\n"""\n\nReturn JSON with keys: language (ISO 639-1 string), content_cleaned (markdown bullet list in source language), content_en (markdown bullet list in English), rating (number 0-10 or null), terrain (string or null), tag_ids (array of UUIDs).` },
         ],
       }),
     });
