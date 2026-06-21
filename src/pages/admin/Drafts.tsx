@@ -4,11 +4,12 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { Trash2, AlertCircle, ExternalLink, Search, Pencil } from "lucide-react";
+import { Trash2, AlertCircle, ExternalLink, Search, Pencil, Sparkles, Loader2 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
 import { formatDistanceToNow } from "date-fns";
 import { EditDraftDialog, DraftReviewLite } from "@/components/admin/EditDraftDialog";
+import IdentifyShoeDialog, { identifyFromUrl, applyIdentification } from "@/components/admin/IdentifyShoeDialog";
 
 interface DraftReview {
   id: string;
@@ -40,6 +41,9 @@ export default function AdminDrafts() {
   const [filter, setFilter] = useState("");
   const [onlyNeedsId, setOnlyNeedsId] = useState(false);
   const [editing, setEditing] = useState<DraftReviewLite | null>(null);
+  const [identifying, setIdentifying] = useState<{ id: string; photo: string; content: string | null } | null>(null);
+  const [bulkBusy, setBulkBusy] = useState(false);
+  const [bulkProgress, setBulkProgress] = useState({ done: 0, total: 0 });
 
   const load = async () => {
     setLoading(true);
@@ -94,6 +98,45 @@ export default function AdminDrafts() {
   useEffect(() => {
     load();
   }, []);
+
+  const bulkIdentify = async () => {
+    const targets = drafts.filter(
+      (d) =>
+        d.media_urls?.[0] &&
+        ((d.content || "").includes("[NEEDS SHOE IDENTIFICATION]") ||
+          d.models?.brands?.name?.toLowerCase() === "unknown")
+    );
+    if (!targets.length) {
+      toast.info("Nothing to identify");
+      return;
+    }
+    if (!confirm(`Auto-identify ${targets.length} drafts? Only high-confidence catalog matches are auto-applied.`)) return;
+    setBulkBusy(true);
+    setBulkProgress({ done: 0, total: targets.length });
+    let auto = 0;
+    let manual = 0;
+    let failed = 0;
+    for (let i = 0; i < targets.length; i++) {
+      const d = targets[i];
+      try {
+        const cands = await identifyFromUrl(d.media_urls![0]);
+        const top = cands[0];
+        if (top && top.modelMatch?.id && (top.confidence ?? 0) >= 0.7) {
+          await applyIdentification(d.id, top.modelMatch.id, d.content);
+          auto++;
+        } else {
+          manual++;
+        }
+      } catch (e) {
+        console.error(e);
+        failed++;
+      }
+      setBulkProgress({ done: i + 1, total: targets.length });
+    }
+    setBulkBusy(false);
+    toast.success(`Auto-identified ${auto} · ${manual} need manual review · ${failed} failed`);
+    load();
+  };
 
   const remove = async (id: string) => {
     if (!confirm("Delete this draft?")) return;
@@ -160,6 +203,19 @@ export default function AdminDrafts() {
         >
           <AlertCircle className="h-4 w-4 mr-1" />
           Needs ID only
+        </Button>
+        <Button size="sm" onClick={bulkIdentify} disabled={bulkBusy || loading}>
+          {bulkBusy ? (
+            <>
+              <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+              {bulkProgress.done}/{bulkProgress.total}
+            </>
+          ) : (
+            <>
+              <Sparkles className="h-4 w-4 mr-1" />
+              Identify all unidentified
+            </>
+          )}
         </Button>
       </div>
 
@@ -252,6 +308,23 @@ export default function AdminDrafts() {
                       <Pencil className="h-3 w-3 mr-1" />
                       Edit
                     </Button>
+                    {d.media_urls?.[0] && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-7 px-2"
+                        onClick={() =>
+                          setIdentifying({
+                            id: d.id,
+                            photo: d.media_urls![0],
+                            content: d.content,
+                          })
+                        }
+                      >
+                        <Sparkles className="h-3 w-3 mr-1" />
+                        Identify
+                      </Button>
+                    )}
                     {d.model_id && (
                       <Button asChild variant="ghost" size="sm" className="h-7 px-2">
                         <Link to={`/model/${d.model_id}`}>
@@ -283,6 +356,17 @@ export default function AdminDrafts() {
         onOpenChange={(v) => !v && setEditing(null)}
         onSaved={load}
       />
+
+      {identifying && (
+        <IdentifyShoeDialog
+          reviewId={identifying.id}
+          photoUrl={identifying.photo}
+          currentContent={identifying.content}
+          open={!!identifying}
+          onOpenChange={(v) => !v && setIdentifying(null)}
+          onApplied={load}
+        />
+      )}
     </div>
   );
 }
