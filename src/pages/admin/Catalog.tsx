@@ -14,6 +14,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, Dialog
 import { Label } from "@/components/ui/label";
 import { CatalogIO } from "@/components/admin/CatalogIO";
 import { CatalogDedup } from "@/components/admin/CatalogDedup";
+import { CatalogCleanNames } from "@/components/admin/CatalogCleanNames";
 
 const PAGE_SIZE = 50;
 
@@ -58,8 +59,18 @@ export default function AdminCatalog() {
   const { data: modelsResult } = useQuery({
     queryKey: ["admin-models", search, filter, brandFilter?.id, modelsPage],
     queryFn: async () => {
+      let brandIds: string[] = [];
+      if (search) {
+        const { data: bm } = await supabase.from("brands").select("id").ilike("name", `%${search}%`).limit(500);
+        brandIds = (bm ?? []).map((b: any) => b.id);
+      }
       let q = supabase.from("models").select("*, brands(name)", { count: "exact" }).order("created_at", { ascending: false });
-      if (search) q = q.ilike("name", `%${search}%`);
+      if (search) {
+        const escaped = search.replace(/[,()]/g, " ");
+        const ors = [`name.ilike.%${escaped}%`];
+        if (brandIds.length) ors.push(`brand_id.in.(${brandIds.join(",")})`);
+        q = q.or(ors.join(","));
+      }
       if (filter === "unverified") q = q.eq("verified", false);
       if (filter === "missing_image") q = q.is("image_url", null);
       if (filter === "pending") q = q.eq("pending_review", true);
@@ -242,6 +253,7 @@ export default function AdminCatalog() {
 
           <CatalogIO />
           <CatalogDedup />
+          <CatalogCleanNames />
           <Button variant="outline" onClick={runSeed} className="rounded-none gap-2"><Sparkles className="w-4 h-4" /> Seed Brands</Button>
           <Button variant="outline" onClick={runDiscover} className="rounded-none gap-2"><RefreshCw className="w-4 h-4" /> Discover</Button>
         </div>
