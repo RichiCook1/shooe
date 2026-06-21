@@ -184,8 +184,13 @@ export default function IdentifyShoeDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="rounded-none border-border max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle className="font-display uppercase tracking-wider text-lg">
-            Identify shoe from photo
+          <DialogTitle className="font-display uppercase tracking-wider text-lg flex items-center justify-between gap-3">
+            <span>Identify shoe from photo</span>
+            {queueInfo && (
+              <span className="text-xs font-sans normal-case tracking-normal text-muted-foreground">
+                {queueInfo.index + 1} of {queueInfo.total}
+              </span>
+            )}
           </DialogTitle>
         </DialogHeader>
 
@@ -195,6 +200,13 @@ export default function IdentifyShoeDialog({
             alt="Shoe"
             className="w-full max-h-64 object-contain bg-muted border border-border"
           />
+          {queueInfo && (
+            <div className="flex justify-end">
+              <Button variant="outline" size="sm" onClick={queueInfo.onSkip}>
+                <SkipForward className="h-3 w-3 mr-1" /> Skip
+              </Button>
+            </div>
+          )}
 
           {loading ? (
             <div className="flex items-center gap-2 text-sm text-muted-foreground py-6 justify-center">
