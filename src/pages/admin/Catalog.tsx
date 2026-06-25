@@ -8,13 +8,15 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { Trash2, CheckCircle2, RefreshCw, Sparkles, Image as ImageIcon, Plus } from "lucide-react";
+import { Trash2, CheckCircle2, RefreshCw, Sparkles, Image as ImageIcon, Plus, Pencil } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { CatalogIO } from "@/components/admin/CatalogIO";
 import { CatalogDedup } from "@/components/admin/CatalogDedup";
 import { CatalogCleanNames } from "@/components/admin/CatalogCleanNames";
+import { EditModelDialog } from "@/components/admin/EditModelDialog";
+import { EditBrandDialog } from "@/components/admin/EditBrandDialog";
 
 const PAGE_SIZE = 50;
 
@@ -26,6 +28,8 @@ export default function AdminCatalog() {
   const [tab, setTab] = useState("models");
   const [modelsPage, setModelsPage] = useState(0);
   const [brandsPage, setBrandsPage] = useState(0);
+  const [editingModel, setEditingModel] = useState<any>(null);
+  const [editingBrand, setEditingBrand] = useState<any>(null);
 
   // Add brand dialog
   const [brandOpen, setBrandOpen] = useState(false);
@@ -332,6 +336,9 @@ export default function AdminCatalog() {
                         <Badge variant="outline" className="rounded-none">Unverified</Badge>}
                     </TableCell>
                     <TableCell className="text-right">
+                      <Button size="sm" variant="ghost" onClick={() => setEditingModel(m)} className="h-8" title="Edit">
+                        <Pencil className="w-4 h-4" />
+                      </Button>
                       <Button size="sm" variant="ghost" onClick={() => enrichOne.mutate(m.id)} className="h-8" title="Fetch image">
                         <ImageIcon className="w-4 h-4" />
                       </Button>
@@ -379,6 +386,9 @@ export default function AdminCatalog() {
                     <TableCell>{b.country ?? "—"}</TableCell>
                     <TableCell className="truncate max-w-xs">{b.website ?? "—"}</TableCell>
                     <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
+                      <Button size="sm" variant="ghost" onClick={() => setEditingBrand(b)} className="h-8" title="Edit">
+                        <Pencil className="w-4 h-4" />
+                      </Button>
                       <Button size="sm" variant="ghost" onClick={() => { if (confirm(`Delete ${b.name}?`)) deleteBrand.mutate(b.id); }} className="h-8 text-destructive">
                         <Trash2 className="w-4 h-4" />
                       </Button>
@@ -400,6 +410,9 @@ export default function AdminCatalog() {
           </div>
         </TabsContent>
       </Tabs>
+
+      <EditModelDialog model={editingModel} open={!!editingModel} onOpenChange={(o) => !o && setEditingModel(null)} />
+      <EditBrandDialog brand={editingBrand} open={!!editingBrand} onOpenChange={(o) => !o && setEditingBrand(null)} />
     </div>
   );
 }
