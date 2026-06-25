@@ -6,7 +6,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
 import { toast } from "sonner";
-import { Upload, FileSpreadsheet } from "lucide-react";
+import { Upload, FileSpreadsheet, ImageIcon, Loader2 } from "lucide-react";
+import { Link } from "react-router-dom";
 
 const ALLOWED_CATEGORIES = new Set([
   "road", "trail", "race", "track", "lifestyle", "hiking", "approach",
