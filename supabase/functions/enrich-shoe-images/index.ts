@@ -23,6 +23,34 @@ interface Candidate {
   confidence: number;
 }
 
+async function googleImagesSearch(brand: string, model: string, variant: "primary" | "side" = "primary"): Promise<Candidate[]> {
+  const KEY = Deno.env.get("SERPAPI_API_KEY");
+  if (!KEY) return [];
+  const q = variant === "side"
+    ? `"${brand} ${model}" side view running shoe`
+    : `"${brand} ${model}" running shoe`;
+  const url = `https://serpapi.com/search.json?engine=google_images&q=${encodeURIComponent(q)}&tbs=isz:m&num=20&api_key=${KEY}`;
+  try {
+    const res = await fetch(url);
+    if (!res.ok) { console.error("serpapi failed", res.status, await res.text().catch(() => "")); return []; }
+    const data = await res.json();
+    const results: any[] = Array.isArray(data?.images_results) ? data.images_results : [];
+    const BLOCK = /(youtube|ytimg|reddit|pinterest|pinimg|tiktok|facebook|fbcdn|instagram|cdninstagram)\./i;
+    const cands: Candidate[] = [];
+    for (const r of results) {
+      const image = r?.original || r?.thumbnail;
+      const page = r?.link || r?.source || null;
+      if (!image || typeof image !== "string" || !image.startsWith("http")) continue;
+      if (BLOCK.test(image) || (page && BLOCK.test(page))) continue;
+      cands.push({ image_url: image, page_url: page, is_side_view: false, confidence: 0.5 });
+    }
+    return cands;
+  } catch (e) {
+    console.error("serpapi err", e);
+    return [];
+  }
+}
+
 async function firecrawlSideViewSearch(brand: string, model: string): Promise<Candidate[]> {
   const FIRECRAWL = Deno.env.get("FIRECRAWL_API_KEY");
   if (!FIRECRAWL) return [];
@@ -47,13 +75,11 @@ async function firecrawlSideViewSearch(brand: string, model: string): Promise<Ca
       }),
     });
     const data = await res.json();
-    // Firecrawl v2 search returns { data: { web: [...], images: [...] } } or { data: [...] }
     let results: any[] = [];
     if (Array.isArray(data?.data)) results = data.data;
     else if (Array.isArray(data?.data?.web)) results = data.data.web;
     else if (Array.isArray(data?.web)) results = data.web;
     else if (Array.isArray(data?.data?.results)) results = data.data.results;
-    if (!results.length) console.log("firecrawl no results", JSON.stringify(data).slice(0, 500));
     const cands: Candidate[] = [];
     for (const r of results) {
       const j = r?.json;
@@ -66,7 +92,6 @@ async function firecrawlSideViewSearch(brand: string, model: string): Promise<Ca
         confidence: typeof j?.confidence === "number" ? j.confidence : 0.4,
       });
     }
-    // Prefer is_side_view first, then by confidence
     cands.sort((a, b) => {
       if (a.is_side_view !== b.is_side_view) return a.is_side_view ? -1 : 1;
       return b.confidence - a.confidence;
@@ -77,6 +102,7 @@ async function firecrawlSideViewSearch(brand: string, model: string): Promise<Ca
     return [];
   }
 }
+
 
 async function fetchImage(url: string, referer?: string | null): Promise<{ bytes: Uint8Array; contentType: string } | { error: string }> {
   try {
@@ -197,47 +223,62 @@ async function enrichOne(supabase: any, model: any, jobId: string | null): Promi
   await supabase.from("models").update({ image_status: "fetching" }).eq("id", model.id);
   await logEvent(supabase, jobId, model.id, fullName, "started", "info", `Processing ${fullName}`);
 
-  const candidates = await firecrawlSideViewSearch(brand, model.name);
+  // Primary: Google Images via SerpAPI. Fallback: Firecrawl. If still nothing, retry with "side view" query.
+  let candidates = await googleImagesSearch(brand, model.name, "primary");
+  let source = "Google Images";
+  if (!candidates.length) {
+    candidates = await firecrawlSideViewSearch(brand, model.name);
+    source = "Firecrawl";
+  }
   await logEvent(supabase, jobId, model.id, fullName, "search_results", candidates.length ? "ok" : "warn",
-    `${candidates.length} candidate(s) from Firecrawl`,
-    { candidates: candidates.slice(0, 5).map((c) => ({ image_url: c.image_url, page_url: c.page_url, is_side_view: c.is_side_view, confidence: c.confidence })) });
+    `${candidates.length} candidate(s) from ${source}`,
+    { source, candidates: candidates.slice(0, 8).map((c) => ({ image_url: c.image_url, page_url: c.page_url })) });
 
   if (!candidates.length) {
     await supabase.from("models").update({ image_status: "failed" }).eq("id", model.id);
-    await logEvent(supabase, jobId, model.id, fullName, "failed", "error", "No candidates returned by Firecrawl");
+    await logEvent(supabase, jobId, model.id, fullName, "failed", "error", "No image candidates found");
     return "failed";
   }
 
   let chosen: { cand: Candidate; bytes: Uint8Array; contentType: string; verdict: VisionVerdict } | null = null;
   const attempted: any[] = [];
 
-  for (const c of candidates.slice(0, 5)) {
-    // 1. Cheap URL prefilter
-    const mismatch = urlMismatchReason(brand, model.name, c.page_url, c.image_url);
-    if (mismatch) {
-      attempted.push({ image_url: c.image_url, page_url: c.page_url, rejected: mismatch });
-      await logEvent(supabase, jobId, model.id, fullName, "candidate_rejected", "warn",
-        `URL mismatch: ${mismatch}`, { image_url: c.image_url, page_url: c.page_url, reason: mismatch });
-      continue;
+  const tryCandidates = async (list: Candidate[]) => {
+    for (const c of list) {
+      const mismatch = urlMismatchReason(brand, model.name, c.page_url, c.image_url);
+      if (mismatch) {
+        attempted.push({ image_url: c.image_url, page_url: c.page_url, rejected: mismatch });
+        await logEvent(supabase, jobId, model.id, fullName, "candidate_rejected", "warn",
+          `URL mismatch: ${mismatch}`, { image_url: c.image_url, page_url: c.page_url, reason: mismatch });
+        continue;
+      }
+      const dl = await fetchImage(c.image_url, c.page_url);
+      if ("error" in dl) {
+        attempted.push({ image_url: c.image_url, page_url: c.page_url, rejected: `download: ${dl.error}` });
+        await logEvent(supabase, jobId, model.id, fullName, "download_failed", "warn", `Could not fetch image: ${dl.error}`, { image_url: c.image_url, page_url: c.page_url });
+        continue;
+      }
+      const dataUrl = bytesToDataUrl(dl.bytes, dl.contentType);
+      const v = await visionVerify(dataUrl, brand, model.name);
+      const ok = !!(v && v.side_view && v.single_shoe && v.brand_match && v.model_match);
+      await logEvent(supabase, jobId, model.id, fullName, "vision_check", ok ? "ok" : "warn",
+        ok ? `Verified: ${brand} ${model.name}` : `Rejected — ${v?.reason ?? "vision call failed"}`,
+        { image_url: c.image_url, page_url: c.page_url, verdict: v });
+      if (ok && v) { chosen = { cand: c, bytes: dl.bytes, contentType: dl.contentType, verdict: v }; return; }
+      attempted.push({ image_url: c.image_url, page_url: c.page_url, rejected: v?.reason ?? "vision failed", verdict: v });
     }
+  };
 
-    // 2. Download
-    const dl = await fetchImage(c.image_url, c.page_url);
-    if ("error" in dl) {
-      attempted.push({ image_url: c.image_url, page_url: c.page_url, rejected: `download: ${dl.error}` });
-      await logEvent(supabase, jobId, model.id, fullName, "download_failed", "warn", `Could not fetch image: ${dl.error}`, { image_url: c.image_url, page_url: c.page_url });
-      continue;
+  await tryCandidates(candidates.slice(0, 10));
+
+  // If nothing passed, retry with explicit "side view" query
+  if (!chosen) {
+    const retry = await googleImagesSearch(brand, model.name, "side");
+    if (retry.length) {
+      await logEvent(supabase, jobId, model.id, fullName, "search_results", "info",
+        `Retry with side-view query: ${retry.length} candidate(s)`, { candidates: retry.slice(0, 8).map((c) => ({ image_url: c.image_url, page_url: c.page_url })) });
+      await tryCandidates(retry.slice(0, 10));
     }
-
-    // 3. Strict vision verify (side view + brand + model)
-    const dataUrl = bytesToDataUrl(dl.bytes, dl.contentType);
-    const v = await visionVerify(dataUrl, brand, model.name);
-    const ok = !!(v && v.side_view && v.single_shoe && v.brand_match && v.model_match);
-    await logEvent(supabase, jobId, model.id, fullName, "vision_check", ok ? "ok" : "warn",
-      ok ? `Verified: ${brand} ${model.name}` : `Rejected — ${v?.reason ?? "vision call failed"}`,
-      { image_url: c.image_url, page_url: c.page_url, verdict: v });
-    if (ok && v) { chosen = { cand: c, bytes: dl.bytes, contentType: dl.contentType, verdict: v }; break; }
-    attempted.push({ image_url: c.image_url, page_url: c.page_url, rejected: v?.reason ?? "vision failed", verdict: v });
   }
 
   if (!chosen) {
@@ -248,6 +289,7 @@ async function enrichOne(supabase: any, model: any, jobId: string | null): Promi
   }
 
   const stored = await uploadBytes(supabase, model.id, chosen.bytes, chosen.contentType);
+
   if (!stored) {
     await supabase.from("models").update({ image_status: "failed" }).eq("id", model.id);
     await logEvent(supabase, jobId, model.id, fullName, "failed", "error", "Failed to upload image to bucket", { source: chosen.cand.image_url });
