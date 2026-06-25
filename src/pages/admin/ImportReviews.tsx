@@ -596,6 +596,45 @@ export default function ImportReviews() {
         </Card>
       )}
 
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <ImageIcon className="h-5 w-5" />
+            Enrich images for imported reviews
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <p className="text-sm text-muted-foreground">
+            Searches the web for a side-view product photo of every shoe model linked to an imported review that doesn't yet have an image. Reviews inherit the model's image automatically. Processes in batches of 10 until done.
+          </p>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button onClick={runEnrichImages} disabled={enrichRunning}>
+              {enrichRunning ? <Loader2 className="h-4 w-4 animate-spin" /> : <ImageIcon className="h-4 w-4" />}
+              {enrichRunning ? "Enriching..." : "Find images"}
+            </Button>
+            {enrichRunning && (
+              <Button variant="outline" onClick={() => setEnrichStop(true)}>Stop after current batch</Button>
+            )}
+            <Button variant="ghost" onClick={refreshRemaining} disabled={enrichRunning}>Refresh count</Button>
+            <Link to="/admin/catalog-health" className="text-xs underline text-muted-foreground ml-auto">
+              View live job timeline →
+            </Link>
+          </div>
+          <div className="grid grid-cols-3 gap-4 text-center pt-2">
+            <Stat label="Done" value={enrichStats.ok} />
+            <Stat label="Failed" value={enrichStats.failed} />
+            <Stat label="Remaining" value={enrichStats.remaining ?? 0} />
+          </div>
+          {enrichLog.length > 0 && (
+            <pre className="text-xs bg-muted p-3 rounded overflow-x-auto whitespace-pre-wrap max-h-48">
+              {enrichLog.join("\n")}
+            </pre>
+          )}
+        </CardContent>
+      </Card>
+
+
+
       {log.length > 0 && (
         <Card>
           <CardHeader><CardTitle>Log</CardTitle></CardHeader>
