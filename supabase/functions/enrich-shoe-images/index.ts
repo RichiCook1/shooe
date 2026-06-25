@@ -23,6 +23,34 @@ interface Candidate {
   confidence: number;
 }
 
+async function googleImagesSearch(brand: string, model: string, variant: "primary" | "side" = "primary"): Promise<Candidate[]> {
+  const KEY = Deno.env.get("SERPAPI_API_KEY");
+  if (!KEY) return [];
+  const q = variant === "side"
+    ? `"${brand} ${model}" side view running shoe`
+    : `"${brand} ${model}" running shoe`;
+  const url = `https://serpapi.com/search.json?engine=google_images&q=${encodeURIComponent(q)}&tbs=isz:m&num=20&api_key=${KEY}`;
+  try {
+    const res = await fetch(url);
+    if (!res.ok) { console.error("serpapi failed", res.status, await res.text().catch(() => "")); return []; }
+    const data = await res.json();
+    const results: any[] = Array.isArray(data?.images_results) ? data.images_results : [];
+    const BLOCK = /(youtube|ytimg|reddit|pinterest|pinimg|tiktok|facebook|fbcdn|instagram|cdninstagram)\./i;
+    const cands: Candidate[] = [];
+    for (const r of results) {
+      const image = r?.original || r?.thumbnail;
+      const page = r?.link || r?.source || null;
+      if (!image || typeof image !== "string" || !image.startsWith("http")) continue;
+      if (BLOCK.test(image) || (page && BLOCK.test(page))) continue;
+      cands.push({ image_url: image, page_url: page, is_side_view: false, confidence: 0.5 });
+    }
+    return cands;
+  } catch (e) {
+    console.error("serpapi err", e);
+    return [];
+  }
+}
+
 async function firecrawlSideViewSearch(brand: string, model: string): Promise<Candidate[]> {
   const FIRECRAWL = Deno.env.get("FIRECRAWL_API_KEY");
   if (!FIRECRAWL) return [];
@@ -47,13 +75,11 @@ async function firecrawlSideViewSearch(brand: string, model: string): Promise<Ca
       }),
     });
     const data = await res.json();
-    // Firecrawl v2 search returns { data: { web: [...], images: [...] } } or { data: [...] }
     let results: any[] = [];
     if (Array.isArray(data?.data)) results = data.data;
     else if (Array.isArray(data?.data?.web)) results = data.data.web;
     else if (Array.isArray(data?.web)) results = data.web;
     else if (Array.isArray(data?.data?.results)) results = data.data.results;
-    if (!results.length) console.log("firecrawl no results", JSON.stringify(data).slice(0, 500));
     const cands: Candidate[] = [];
     for (const r of results) {
       const j = r?.json;
@@ -66,7 +92,6 @@ async function firecrawlSideViewSearch(brand: string, model: string): Promise<Ca
         confidence: typeof j?.confidence === "number" ? j.confidence : 0.4,
       });
     }
-    // Prefer is_side_view first, then by confidence
     cands.sort((a, b) => {
       if (a.is_side_view !== b.is_side_view) return a.is_side_view ? -1 : 1;
       return b.confidence - a.confidence;
@@ -77,6 +102,7 @@ async function firecrawlSideViewSearch(brand: string, model: string): Promise<Ca
     return [];
   }
 }
+
 
 async function fetchImage(url: string, referer?: string | null): Promise<{ bytes: Uint8Array; contentType: string } | { error: string }> {
   try {
