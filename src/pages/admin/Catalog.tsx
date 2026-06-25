@@ -386,6 +386,9 @@ export default function AdminCatalog() {
                     <TableCell>{b.country ?? "—"}</TableCell>
                     <TableCell className="truncate max-w-xs">{b.website ?? "—"}</TableCell>
                     <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
+                      <Button size="sm" variant="ghost" onClick={() => setEditingBrand(b)} className="h-8" title="Edit">
+                        <Pencil className="w-4 h-4" />
+                      </Button>
                       <Button size="sm" variant="ghost" onClick={() => { if (confirm(`Delete ${b.name}?`)) deleteBrand.mutate(b.id); }} className="h-8 text-destructive">
                         <Trash2 className="w-4 h-4" />
                       </Button>
