@@ -80,7 +80,77 @@ export default function ImportReviews() {
     brands: number; models: number; reviews: number; skipped: number;
   } | null>(null);
 
+  // Image enrichment state
+  const [enrichRunning, setEnrichRunning] = useState(false);
+  const [enrichStop, setEnrichStop] = useState(false);
+  const [enrichStats, setEnrichStats] = useState<{ ok: number; failed: number; remaining: number | null }>({ ok: 0, failed: 0, remaining: null });
+  const [enrichLog, setEnrichLog] = useState<string[]>([]);
+
   const addLog = (msg: string) => setLog((p) => [...p, msg]);
+  const addEnrichLog = (msg: string) => setEnrichLog((p) => [...p.slice(-50), msg]);
+
+  const countRemaining = async (): Promise<number> => {
+    const { data: revRows } = await supabase
+      .from("reviews")
+      .select("model_id")
+      .like("guest_session_id", "import:%")
+      .not("model_id", "is", null);
+    const ids = Array.from(new Set((revRows ?? []).map((r: any) => r.model_id))).filter(Boolean);
+    if (!ids.length) return 0;
+    const { count } = await supabase
+      .from("models")
+      .select("id", { count: "exact", head: true })
+      .in("id", ids)
+      .or("image_url.is.null,image_status.eq.failed");
+    return count ?? 0;
+  };
+
+  const refreshRemaining = async () => {
+    try {
+      const remaining = await countRemaining();
+      setEnrichStats((s) => ({ ...s, remaining }));
+    } catch (e) { /* noop */ }
+  };
+
+  const runEnrichImages = async () => {
+    setEnrichRunning(true);
+    setEnrichStop(false);
+    setEnrichStats({ ok: 0, failed: 0, remaining: null });
+    setEnrichLog([]);
+    try {
+      const initial = await countRemaining();
+      setEnrichStats({ ok: 0, failed: 0, remaining: initial });
+      addEnrichLog(`Found ${initial} model(s) needing images.`);
+      if (!initial) { toast.success("Nothing to enrich"); return; }
+
+      const BATCH = 10;
+      while (true) {
+        if (enrichStop) { addEnrichLog("Stopped by user."); break; }
+        const { data, error } = await supabase.functions.invoke("enrich-shoe-images", {
+          body: { scope: "imported-reviews", limit: BATCH },
+        });
+        if (error) {
+          addEnrichLog(`ERROR: ${error.message || String(error)}`);
+          toast.error(error.message || "Enrichment failed");
+          break;
+        }
+        const batchOk = data?.ok ?? 0;
+        const batchFailed = data?.failed ?? 0;
+        const batchTotal = data?.total ?? 0;
+        addEnrichLog(`Batch: ${batchOk} ok, ${batchFailed} failed (of ${batchTotal}).`);
+        setEnrichStats((s) => ({ ok: s.ok + batchOk, failed: s.failed + batchFailed, remaining: s.remaining }));
+        await refreshRemaining();
+        if (batchTotal === 0) { addEnrichLog("Done."); break; }
+      }
+    } catch (e: any) {
+      addEnrichLog(`ERROR: ${e?.message || String(e)}`);
+      toast.error(e?.message || "Enrichment failed");
+    } finally {
+      setEnrichRunning(false);
+    }
+  };
+
+
 
   const run = async () => {
     if (!file) return;
