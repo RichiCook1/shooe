@@ -267,7 +267,7 @@ Deno.serve(async (req) => {
   try {
     const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
     const body = await req.json().catch(() => ({}));
-    const { modelId, limit = 25 } = body;
+    const { modelId, limit = 25, scope } = body;
 
     const { data: job } = await supabase.from("catalog_jobs")
       .insert({ job_name: "enrich-shoe-images", status: "running" }).select().single();
@@ -279,6 +279,24 @@ Deno.serve(async (req) => {
     if (modelId) {
       const { data } = await supabase.from("models").select("*, brands(name, website)").eq("id", modelId);
       models = data ?? [];
+    } else if (scope === "imported-reviews") {
+      // Distinct model_ids referenced by imported reviews, where the model still needs an image.
+      const { data: revRows } = await supabase
+        .from("reviews")
+        .select("model_id")
+        .like("guest_session_id", "import:%")
+        .not("model_id", "is", null);
+      const modelIds = Array.from(new Set((revRows ?? []).map((r: any) => r.model_id))).filter(Boolean);
+      if (modelIds.length) {
+        const { data } = await supabase
+          .from("models")
+          .select("*, brands(name, website)")
+          .in("id", modelIds)
+          .or("image_url.is.null,image_status.eq.failed")
+          .neq("image_status", "fetching")
+          .limit(limit);
+        models = data ?? [];
+      }
     } else {
       const { data } = await supabase.from("models")
         .select("*, brands(name, website)")

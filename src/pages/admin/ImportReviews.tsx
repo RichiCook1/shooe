@@ -6,7 +6,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
 import { toast } from "sonner";
-import { Upload, FileSpreadsheet } from "lucide-react";
+import { Upload, FileSpreadsheet, ImageIcon, Loader2 } from "lucide-react";
+import { Link } from "react-router-dom";
 
 const ALLOWED_CATEGORIES = new Set([
   "road", "trail", "race", "track", "lifestyle", "hiking", "approach",
@@ -79,7 +80,77 @@ export default function ImportReviews() {
     brands: number; models: number; reviews: number; skipped: number;
   } | null>(null);
 
+  // Image enrichment state
+  const [enrichRunning, setEnrichRunning] = useState(false);
+  const [enrichStop, setEnrichStop] = useState(false);
+  const [enrichStats, setEnrichStats] = useState<{ ok: number; failed: number; remaining: number | null }>({ ok: 0, failed: 0, remaining: null });
+  const [enrichLog, setEnrichLog] = useState<string[]>([]);
+
   const addLog = (msg: string) => setLog((p) => [...p, msg]);
+  const addEnrichLog = (msg: string) => setEnrichLog((p) => [...p.slice(-50), msg]);
+
+  const countRemaining = async (): Promise<number> => {
+    const { data: revRows } = await supabase
+      .from("reviews")
+      .select("model_id")
+      .like("guest_session_id", "import:%")
+      .not("model_id", "is", null);
+    const ids = Array.from(new Set((revRows ?? []).map((r: any) => r.model_id))).filter(Boolean);
+    if (!ids.length) return 0;
+    const { count } = await supabase
+      .from("models")
+      .select("id", { count: "exact", head: true })
+      .in("id", ids)
+      .or("image_url.is.null,image_status.eq.failed");
+    return count ?? 0;
+  };
+
+  const refreshRemaining = async () => {
+    try {
+      const remaining = await countRemaining();
+      setEnrichStats((s) => ({ ...s, remaining }));
+    } catch (e) { /* noop */ }
+  };
+
+  const runEnrichImages = async () => {
+    setEnrichRunning(true);
+    setEnrichStop(false);
+    setEnrichStats({ ok: 0, failed: 0, remaining: null });
+    setEnrichLog([]);
+    try {
+      const initial = await countRemaining();
+      setEnrichStats({ ok: 0, failed: 0, remaining: initial });
+      addEnrichLog(`Found ${initial} model(s) needing images.`);
+      if (!initial) { toast.success("Nothing to enrich"); return; }
+
+      const BATCH = 10;
+      while (true) {
+        if (enrichStop) { addEnrichLog("Stopped by user."); break; }
+        const { data, error } = await supabase.functions.invoke("enrich-shoe-images", {
+          body: { scope: "imported-reviews", limit: BATCH },
+        });
+        if (error) {
+          addEnrichLog(`ERROR: ${error.message || String(error)}`);
+          toast.error(error.message || "Enrichment failed");
+          break;
+        }
+        const batchOk = data?.ok ?? 0;
+        const batchFailed = data?.failed ?? 0;
+        const batchTotal = data?.total ?? 0;
+        addEnrichLog(`Batch: ${batchOk} ok, ${batchFailed} failed (of ${batchTotal}).`);
+        setEnrichStats((s) => ({ ok: s.ok + batchOk, failed: s.failed + batchFailed, remaining: s.remaining }));
+        await refreshRemaining();
+        if (batchTotal === 0) { addEnrichLog("Done."); break; }
+      }
+    } catch (e: any) {
+      addEnrichLog(`ERROR: ${e?.message || String(e)}`);
+      toast.error(e?.message || "Enrichment failed");
+    } finally {
+      setEnrichRunning(false);
+    }
+  };
+
+
 
   const run = async () => {
     if (!file) return;
@@ -524,6 +595,45 @@ export default function ImportReviews() {
           </CardContent>
         </Card>
       )}
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <ImageIcon className="h-5 w-5" />
+            Enrich images for imported reviews
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <p className="text-sm text-muted-foreground">
+            Searches the web for a side-view product photo of every shoe model linked to an imported review that doesn't yet have an image. Reviews inherit the model's image automatically. Processes in batches of 10 until done.
+          </p>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button onClick={runEnrichImages} disabled={enrichRunning}>
+              {enrichRunning ? <Loader2 className="h-4 w-4 animate-spin" /> : <ImageIcon className="h-4 w-4" />}
+              {enrichRunning ? "Enriching..." : "Find images"}
+            </Button>
+            {enrichRunning && (
+              <Button variant="outline" onClick={() => setEnrichStop(true)}>Stop after current batch</Button>
+            )}
+            <Button variant="ghost" onClick={refreshRemaining} disabled={enrichRunning}>Refresh count</Button>
+            <Link to="/admin/catalog-health" className="text-xs underline text-muted-foreground ml-auto">
+              View live job timeline →
+            </Link>
+          </div>
+          <div className="grid grid-cols-3 gap-4 text-center pt-2">
+            <Stat label="Done" value={enrichStats.ok} />
+            <Stat label="Failed" value={enrichStats.failed} />
+            <Stat label="Remaining" value={enrichStats.remaining ?? 0} />
+          </div>
+          {enrichLog.length > 0 && (
+            <pre className="text-xs bg-muted p-3 rounded overflow-x-auto whitespace-pre-wrap max-h-48">
+              {enrichLog.join("\n")}
+            </pre>
+          )}
+        </CardContent>
+      </Card>
+
+
 
       {log.length > 0 && (
         <Card>
