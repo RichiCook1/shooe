@@ -8,13 +8,15 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { Trash2, CheckCircle2, RefreshCw, Sparkles, Image as ImageIcon, Plus } from "lucide-react";
+import { Trash2, CheckCircle2, RefreshCw, Sparkles, Image as ImageIcon, Plus, Pencil } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { CatalogIO } from "@/components/admin/CatalogIO";
 import { CatalogDedup } from "@/components/admin/CatalogDedup";
 import { CatalogCleanNames } from "@/components/admin/CatalogCleanNames";
+import { EditModelDialog } from "@/components/admin/EditModelDialog";
+import { EditBrandDialog } from "@/components/admin/EditBrandDialog";
 
 const PAGE_SIZE = 50;
 
