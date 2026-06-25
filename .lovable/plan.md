@@ -1,48 +1,32 @@
+# Plan: Enrich images for imported reviews
 
-## Problem
+## Goal
+Find side-view product images on the web for every shoe model linked to an imported review that doesn't yet have an image. Reviews inherit the model's `image_url`, so enriching the model populates all its reviews.
 
-The uploaded file has a single sheet named `Merged` with columns: `Reviewer, Shoe Model, Detailed Review Summary, Weight, Stack Height, Heel Drop, Midsole Foam Material, Price, Key Features, Intended Use Case, Reviewer Sentiment (Inferred), Source`.
+## Approach
+Reuse the existing `enrich-shoe-images` edge function (Firecrawl search + Gemini vision verification + upload to `shoe-photos` bucket). No new scraping logic needed.
 
-The current importer (`src/pages/admin/ImportReviews.tsx`) only understands the two-sheet `Sample Products` + `Generated Reviews` format and looks for `brand`, `model`, `review_text` columns. None match, so it parses 60 products with no brand column and 0 reviews.
+## Changes
 
-## Fix
+### 1. Edge function: extend `enrich-shoe-images`
+Add a new mode `{ scope: "imported-reviews" }` that:
+- Queries distinct `model_id`s from `reviews` where `guest_session_id LIKE 'import:%'`
+- Joins to `models` and filters to those with `image_url IS NULL` OR `image_status = 'failed'`
+- Runs the existing `enrichOne()` loop over that set, with a configurable `limit` (default 50 per call to stay within timeout)
+- Logs progress to `catalog_job_events` like today so it shows up in Catalog Health
 
-Update `src/pages/admin/ImportReviews.tsx` to auto-detect the format and handle the merged layout. No schema changes, no edge function changes.
-
-### Format detection
-- If a sheet has columns `Reviewer` + `Shoe Model` + `Detailed Review Summary` → treat as merged Kofuzi format.
-- Otherwise fall back to existing two-sheet logic.
-
-### Merged-row processing
-For each row:
-1. **Brand + model split** from `Shoe Model`:
-   - Maintain a known-brand list (Adidas, Hoka, Nike, Asics, Saucony, Brooks, New Balance, On, Puma, Mizuno, Altra, Topo, Salomon, La Sportiva, Merrell, Reebok, Under Armour, Skechers, Diadora).
-   - Match longest known brand prefix (so "New Balance" / "La Sportiva" work); remainder = model name. If none match, first token = brand.
-2. **Specs parsing** (regex `(\d+(?:\.\d+)?)`, first match):
-   - `weight_g`: from `Weight`, prefer the value inside `(### g)`; else if "oz" convert oz→g (×28.3495).
-   - `stack_height_mm`: first number in `Stack Height` (handles "45 mm (Heel) / 39 mm").
-   - `drop_mm`: first number in `Heel Drop`.
-   - `msrp`: first number in `Price` (strip `$`, commas).
-3. **Brand upsert**: reuse existing brand cache; insert new brands as needed.
-4. **Model upsert**: lookup by `(brand_id, lowercased name)`. If new, insert with parsed specs + `source: "kofuzi-import"`, `category: "road"` (no category column in file), `verified: false`. If existing, patch any spec field that is currently null with parsed value (don't overwrite existing specs).
-5. **Review insert**: build `content` as:
-   ```
-   {Detailed Review Summary}
-
-   Key features: {Key Features}
-   Best for: {Intended Use Case}
-   Midsole: {Midsole Foam Material}
-
-   [Reviewer: Kofuzi · Sentiment: ...]
-   Sources: {Source}
-   ```
-   Only include sections whose source cell is non-empty. Insert with `is_guest: true`, `guest_session_id: "import:kofuzi:<uuid>"`, `media_urls: []`, `model_id: <upserted>`.
-
-### UI
-- Same upload UI; the summary card already shows Brands / Models / Reviews / Skipped — values will populate correctly once parsing works.
-- Log lines mention "Detected merged Kofuzi format" when that path runs.
+### 2. UI: button on Import Reviews page
+Add an "Enrich images for imported reviews" card to `src/pages/admin/ImportReviews.tsx`:
+- Shows count of imported-review models missing an image
+- Button triggers the edge function in batches (loop until 0 remain or user stops)
+- Live progress: total / done / failed, plus a link to Catalog Health for the per-model timeline
 
 ## Technical notes
-- All changes confined to `src/pages/admin/ImportReviews.tsx`.
-- Chunked inserts (100 models, 200 reviews) preserved.
-- Existing two-sheet path untouched for backward compatibility.
+- No schema changes — `models.image_url`, `image_status`, `image_source_url`, and `catalog_job_events` already exist.
+- Vision verification is strict (brand + model match) so junk results get rejected automatically; failures are marked `image_status='failed'` and can be retried.
+- Firecrawl + Lovable AI Gateway keys are already configured.
+- Processing is sequential per model (Firecrawl + vision per candidate) — expect ~10–20s per shoe. Batching from the UI keeps each function call under the edge timeout.
+
+## Out of scope
+- Per-review (non-catalog) photos.
+- Improving the search/vision prompts (current pipeline is reused as-is).
