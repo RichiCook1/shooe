@@ -1,32 +1,35 @@
-# Plan: Enrich images for imported reviews
-
 ## Goal
-Find side-view product images on the web for every shoe model linked to an imported review that doesn't yet have an image. Reviews inherit the model's `image_url`, so enriching the model populates all its reviews.
+Replace the weak Firecrawl-based image search with a direct **Google Images** search via SerpAPI (already configured as `SERPAPI_API_KEY`, same provider already used for Google Lens).
 
-## Approach
-Reuse the existing `enrich-shoe-images` edge function (Firecrawl search + Gemini vision verification + upload to `shoe-photos` bucket). No new scraping logic needed.
+## Why this works better
+- Google Images returns dozens of high-quality product shots per query, ranked by relevance to the exact product name.
+- We skip Firecrawl's scrape + JSON extraction round-trip (which often returned nothing because retailer pages don't expose clean image metadata).
+- SerpAPI gives us direct `original` image URLs + source page URLs in one call.
 
 ## Changes
 
-### 1. Edge function: extend `enrich-shoe-images`
-Add a new mode `{ scope: "imported-reviews" }` that:
-- Queries distinct `model_id`s from `reviews` where `guest_session_id LIKE 'import:%'`
-- Joins to `models` and filters to those with `image_url IS NULL` OR `image_status = 'failed'`
-- Runs the existing `enrichOne()` loop over that set, with a configurable `limit` (default 50 per call to stay within timeout)
-- Logs progress to `catalog_job_events` like today so it shows up in Catalog Health
+### `supabase/functions/enrich-shoe-images/index.ts`
+1. Add a new `googleImagesSearch(brand, model)` function that calls:
+   ```
+   https://serpapi.com/search.json?engine=google_images&q=<brand>+<model>+running+shoe&tbs=isz:m&num=15
+   ```
+   Returns the top ~10 candidates with `image_url` + `page_url` from the `images_results` array.
+2. Use Google Images as the **primary** source. Keep Firecrawl as fallback only if SerpAPI returns nothing or the key is missing.
+3. Keep the existing **Gemini vision verification step** that confirms each candidate is a clean lateral/side view on plain background — this is what actually guarantees quality. Walk down the Google Images list until one passes.
+4. Keep the existing download + upload-to-storage + `image_source_url` save flow unchanged.
+5. Keep the `catalog_job_events` logging so the live job timeline on Catalog Health still shows per-candidate reasoning.
 
-### 2. UI: button on Import Reviews page
-Add an "Enrich images for imported reviews" card to `src/pages/admin/ImportReviews.tsx`:
-- Shows count of imported-review models missing an image
-- Button triggers the edge function in batches (loop until 0 remain or user stops)
-- Live progress: total / done / failed, plus a link to Catalog Health for the per-model timeline
+### Query tuning
+- Primary query: `"<brand> <model>" running shoe`
+- If 0 verified results, retry with `"<brand> <model>" side view`
+- Skip results whose URL points to YouTube/Reddit/Pinterest thumbnails.
 
-## Technical notes
-- No schema changes — `models.image_url`, `image_status`, `image_source_url`, and `catalog_job_events` already exist.
-- Vision verification is strict (brand + model match) so junk results get rejected automatically; failures are marked `image_status='failed'` and can be retried.
-- Firecrawl + Lovable AI Gateway keys are already configured.
-- Processing is sequential per model (Firecrawl + vision per candidate) — expect ~10–20s per shoe. Batching from the UI keeps each function call under the edge timeout.
+## What stays the same
+- Frontend UI (Import Reviews "Find images" card, Catalog Health timeline).
+- Batch processing, scope filters (`imported-reviews`, single `modelId`, sweep).
+- Vision verification — still required before saving to avoid junk images.
+- Storage bucket and DB columns.
 
 ## Out of scope
-- Per-review (non-catalog) photos.
-- Improving the search/vision prompts (current pipeline is reused as-is).
+- No new secrets needed (SerpAPI already configured).
+- No frontend changes.
