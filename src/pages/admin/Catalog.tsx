@@ -28,6 +28,8 @@ export default function AdminCatalog() {
   const [tab, setTab] = useState("models");
   const [modelsPage, setModelsPage] = useState(0);
   const [brandsPage, setBrandsPage] = useState(0);
+  const [editingModel, setEditingModel] = useState<any>(null);
+  const [editingBrand, setEditingBrand] = useState<any>(null);
 
   // Add brand dialog
   const [brandOpen, setBrandOpen] = useState(false);
