@@ -235,7 +235,7 @@ export default function ImportReviews() {
         if (existing.drop_mm == null && p.drop_mm != null) patch.drop_mm = p.drop_mm;
         if (existing.msrp == null && p.msrp != null) patch.msrp = p.msrp;
         if (Object.keys(patch).length) {
-          patchOps.push(supabase.from("models").update(patch).eq("id", existing.id));
+          patchOps.push(Promise.resolve(supabase.from("models").update(patch).eq("id", existing.id)));
         }
       }
       if (patchOps.length) {
