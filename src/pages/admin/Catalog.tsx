@@ -336,6 +336,9 @@ export default function AdminCatalog() {
                         <Badge variant="outline" className="rounded-none">Unverified</Badge>}
                     </TableCell>
                     <TableCell className="text-right">
+                      <Button size="sm" variant="ghost" onClick={() => setEditingModel(m)} className="h-8" title="Edit">
+                        <Pencil className="w-4 h-4" />
+                      </Button>
                       <Button size="sm" variant="ghost" onClick={() => enrichOne.mutate(m.id)} className="h-8" title="Fetch image">
                         <ImageIcon className="w-4 h-4" />
                       </Button>
