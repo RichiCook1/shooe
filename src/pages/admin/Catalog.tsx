@@ -410,6 +410,9 @@ export default function AdminCatalog() {
           </div>
         </TabsContent>
       </Tabs>
+
+      <EditModelDialog model={editingModel} open={!!editingModel} onOpenChange={(o) => !o && setEditingModel(null)} />
+      <EditBrandDialog brand={editingBrand} open={!!editingBrand} onOpenChange={(o) => !o && setEditingBrand(null)} />
     </div>
   );
 }
