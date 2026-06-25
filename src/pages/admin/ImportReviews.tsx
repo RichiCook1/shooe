@@ -616,7 +616,7 @@ export default function ImportReviews() {
               <Button variant="outline" onClick={() => setEnrichStop(true)}>Stop after current batch</Button>
             )}
             <Button variant="ghost" onClick={refreshRemaining} disabled={enrichRunning}>Refresh count</Button>
-            <Link to="/admin/catalog-health" className="text-xs underline text-muted-foreground ml-auto">
+            <Link to="/admin/catalog/health" className="text-xs underline text-muted-foreground ml-auto">
               View live job timeline →
             </Link>
           </div>
