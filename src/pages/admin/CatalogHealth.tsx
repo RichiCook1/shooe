@@ -182,15 +182,31 @@ function JobDrawer({ jobId, onClose }: { jobId: string | null; onClose: () => vo
 
 function EventRow({ ev }: { ev: any }) {
   const [open, setOpen] = useState(false);
+  const [saving, setSaving] = useState<string | null>(null);
+  const [savedUrl, setSavedUrl] = useState<string | null>(null);
   const color =
     ev.status === "ok" ? "bg-green-500" :
     ev.status === "error" ? "bg-red-500" :
     ev.status === "warn" ? "bg-yellow-500" : "bg-muted-foreground";
   const d = ev.data ?? {};
   const verdict = d.verdict;
-  const thumbs: string[] = Array.isArray(d.candidates)
-    ? d.candidates.map((c: any) => c.image_url).filter(Boolean)
-    : d.image_url ? [d.image_url] : [];
+  const candidates: { image_url: string; page_url?: string }[] = Array.isArray(d.candidates)
+    ? d.candidates.filter((c: any) => c?.image_url)
+    : d.image_url ? [{ image_url: d.image_url, page_url: d.page_url }] : [];
+
+  const pick = async (url: string, sourceUrl?: string) => {
+    if (!ev.model_id) { toast.error("No model linked to this event"); return; }
+    setSaving(url);
+    const { error } = await supabase
+      .from("models")
+      .update({ image_url: url, image_source_url: sourceUrl ?? null, pending_review: false })
+      .eq("id", ev.model_id);
+    setSaving(null);
+    if (error) { toast.error(error.message); return; }
+    setSavedUrl(url);
+    toast.success("Image saved to model");
+  };
+
   return (
     <div className="p-3 text-xs">
       <button onClick={() => ev.data && setOpen(!open)} className="w-full flex items-start gap-2 text-left">
@@ -208,18 +224,36 @@ function EventRow({ ev }: { ev: any }) {
               brand:{String(verdict.brand_match)} · model:{String(verdict.model_match)} · side:{String(verdict.side_view)}
             </div>
           )}
-          {thumbs.length > 0 && (
-            <div className="mt-2 flex gap-1 flex-wrap">
-              {thumbs.slice(0, 5).map((u, i) => (
-                <a key={i} href={d.page_url ?? u} target="_blank" rel="noreferrer">
-                  <img src={u} alt="" className="w-14 h-14 object-cover border border-border" />
-                </a>
-              ))}
-            </div>
-          )}
-          {d.page_url && <a href={d.page_url} target="_blank" rel="noreferrer" className="block mt-1 text-[10px] underline truncate">{d.page_url}</a>}
         </div>
       </button>
+      {candidates.length > 0 && (
+        <div className="mt-2 ml-4 grid grid-cols-2 sm:grid-cols-3 gap-2">
+          {candidates.slice(0, 12).map((c, i) => {
+            const isSaved = savedUrl === c.image_url;
+            return (
+              <div key={i} className={`border ${isSaved ? "border-green-500" : "border-border"} p-1 flex flex-col gap-1`}>
+                <a href={c.page_url ?? c.image_url} target="_blank" rel="noreferrer">
+                  <img src={c.image_url} alt="" className="w-full h-24 object-contain bg-white" />
+                </a>
+                <Button
+                  size="sm"
+                  variant={isSaved ? "default" : "outline"}
+                  disabled={saving === c.image_url || !ev.model_id}
+                  onClick={(e) => { e.stopPropagation(); pick(c.image_url, c.page_url); }}
+                  className="rounded-none h-7 text-[10px]"
+                >
+                  {isSaved ? "✓ Saved" : saving === c.image_url ? "Saving…" : "Use this"}
+                </Button>
+                {c.page_url && (
+                  <a href={c.page_url} target="_blank" rel="noreferrer" className="text-[9px] underline truncate text-muted-foreground">
+                    {new URL(c.page_url).hostname}
+                  </a>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
       {open && ev.data && (
         <pre className="mt-2 ml-4 p-2 bg-muted overflow-x-auto text-[10px] whitespace-pre-wrap break-all">{JSON.stringify(ev.data, null, 2)}</pre>
       )}
