@@ -1,0 +1,1 @@
+ALTER TABLE public.brands ADD COLUMN IF NOT EXISTS notes text, ADD COLUMN IF NOT EXISTS facts_updated_at timestamptz;
