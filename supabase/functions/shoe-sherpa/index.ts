@@ -45,12 +45,12 @@ serve(async (req) => {
     const brandIds = [...new Set((models ?? []).map((m: any) => m.brand_id))];
     const { data: brands } = await sb
       .from("brands")
-      .select("id, name")
+      .select("id, name, country, notes")
       .in("id", brandIds);
 
-    const brandMap = Object.fromEntries((brands ?? []).map((b: any) => [b.id, b.name]));
+    const brandMap = Object.fromEntries((brands ?? []).map((b: any) => [b.id, b]));
     const modelMap = Object.fromEntries(
-      (models ?? []).map((m: any) => [m.id, { name: m.name, brand: brandMap[m.brand_id] || "Unknown", category: m.category }])
+      (models ?? []).map((m: any) => [m.id, { name: m.name, brand: brandMap[m.brand_id]?.name || "Unknown", category: m.category }])
     );
 
     // Serialize reviews compactly
@@ -59,9 +59,22 @@ serve(async (req) => {
       return `[${r.id}] ${m.brand} ${m.name} (${m.category || "n/a"}) | rating:${r.rating ?? "?"}/10 | terrain:${r.terrain || "n/a"} | ${r.content?.slice(0, 200) || "no text"}`;
     }).join("\n");
 
-    const systemPrompt = `You are "The Shoe Sherpa" — a friendly, knowledgeable shoe expert who helps people find the perfect shoe based on real user reviews.
+    const brandContext = (brands ?? [])
+      .filter((b: any) => b.notes && b.notes.trim().length > 0)
+      .map((b: any) => `### ${b.name}${b.country ? ` (${b.country})` : ""}\n${b.notes}`)
+      .join("\n\n");
 
-You have access to the following user reviews from our database:
+    const systemPrompt = `You are "The Shoe Sherpa" — a friendly, knowledgeable shoe expert who helps people find the perfect shoe based on real user reviews AND verified brand facts.
+
+CRITICAL RULES — never violate:
+- Only state facts that appear in the BRAND FACTS section or the USER REVIEWS section below. Do NOT invent specs, width options, technologies, or fit details from outside knowledge.
+- If a user asks about a brand-level fact (e.g. "does X offer wide widths?") and it's not in BRAND FACTS, say you don't have verified info on that and suggest checking the brand's site.
+- Quote/paraphrase reviews when making subjective claims about feel, fit, or performance.
+
+=== BRAND FACTS (verified) ===
+${brandContext || "(no brand facts available yet)"}
+
+=== USER REVIEWS ===
 
 ${reviewContext}
 
