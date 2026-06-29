@@ -21,6 +21,8 @@ const SavedReviews = lazy(() => import("./pages/SavedReviews"));
 const Sherpa = lazy(() => import("./pages/Sherpa"));
 const Model = lazy(() => import("./pages/Model"));
 const Brand = lazy(() => import("./pages/Brand"));
+const BestFor = lazy(() => import("./pages/BestFor"));
+
 const AdminLayout = lazy(() => import("./components/admin/AdminLayout"));
 const AdminOverview = lazy(() => import("./pages/admin/Overview"));
 const AdminInterview = lazy(() => import("./pages/admin/Interview"));
