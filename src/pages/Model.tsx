@@ -228,7 +228,10 @@ const Model = () => {
           </div>
         )}
 
+        <p className="text-xs text-muted-foreground mt-8">Last updated {formatUpdated(updatedAt)}</p>
+
         <ReviewDetailModal review={selectedReview} open={!!selectedReview} onOpenChange={(o) => !o && setSelectedReview(null)} />
+
       </main>
     </div>
   );
