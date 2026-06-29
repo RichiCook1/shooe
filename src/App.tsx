@@ -75,6 +75,8 @@ const App = () => (
               <Route path="/sherpa" element={<Sherpa />} />
               <Route path="/model/:modelId" element={<Model />} />
               <Route path="/brand/:brandId" element={<Brand />} />
+              <Route path="/best/:slug" element={<BestFor />} />
+
               <Route path="/admin" element={<AdminRoute><AdminLayout /></AdminRoute>}>
                 <Route index element={<AdminOverview />} />
                 <Route path="interview" element={<AdminInterview />} />
