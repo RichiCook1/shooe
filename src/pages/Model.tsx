@@ -104,7 +104,7 @@ const Model = () => {
   const canonical = `https://shoe-sherpa.com/model/${model.id}`;
   const pageTitle = `${[model.brand?.name, model.name].filter(Boolean).join(" ")} Review (2026) — Shoe Sherpa`;
   const pageDescription = aggregateSentence.slice(0, 158);
-  const updatedAt = model.updated_at || summary?.updated_at || new Date().toISOString();
+  const updatedAt = (model as any).updated_at || summary?.updated_at || new Date().toISOString();
 
   const jsonLd = productJsonLd({
     url: canonical,
