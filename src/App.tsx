@@ -21,6 +21,8 @@ const SavedReviews = lazy(() => import("./pages/SavedReviews"));
 const Sherpa = lazy(() => import("./pages/Sherpa"));
 const Model = lazy(() => import("./pages/Model"));
 const Brand = lazy(() => import("./pages/Brand"));
+const BestFor = lazy(() => import("./pages/BestFor"));
+
 const AdminLayout = lazy(() => import("./components/admin/AdminLayout"));
 const AdminOverview = lazy(() => import("./pages/admin/Overview"));
 const AdminInterview = lazy(() => import("./pages/admin/Interview"));
@@ -73,6 +75,8 @@ const App = () => (
               <Route path="/sherpa" element={<Sherpa />} />
               <Route path="/model/:modelId" element={<Model />} />
               <Route path="/brand/:brandId" element={<Brand />} />
+              <Route path="/best/:slug" element={<BestFor />} />
+
               <Route path="/admin" element={<AdminRoute><AdminLayout /></AdminRoute>}>
                 <Route index element={<AdminOverview />} />
                 <Route path="interview" element={<AdminInterview />} />

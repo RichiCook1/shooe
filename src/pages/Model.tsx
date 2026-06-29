@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useParams, Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
+import { Helmet } from "react-helmet-async";
 import { supabase } from "@/integrations/supabase/client";
 import Navbar from "@/components/landing/Navbar";
 import ReviewCard from "@/components/ReviewCard";
@@ -9,6 +10,9 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, Sparkles } from "lucide-react";
 import { getStorageThumb } from "@/lib/imageCompression";
+import { shoeAggregateSentence, formatUpdated } from "@/lib/segmentStats";
+import { productJsonLd } from "@/lib/jsonld";
+
 
 const Model = () => {
   const { modelId } = useParams<{ modelId: string }>();
@@ -89,13 +93,60 @@ const Model = () => {
     );
   }
 
+  const topTagLabel = Array.isArray(summary?.top_tags) && (summary?.top_tags as any[])[0]?.label;
+  const aggregateSentence = shoeAggregateSentence({
+    brand: model.brand?.name ?? null,
+    model: model.name,
+    reviewCount: reviews?.length ?? summary?.review_count ?? 0,
+    avgRating: summary?.avg_rating ?? null,
+    topAttribute: topTagLabel || null,
+  });
+  const canonical = `https://shoe-sherpa.com/model/${model.id}`;
+  const pageTitle = `${[model.brand?.name, model.name].filter(Boolean).join(" ")} Review (2026) — Shoe Sherpa`;
+  const pageDescription = aggregateSentence.slice(0, 158);
+  const updatedAt = (model as any).updated_at || summary?.updated_at || new Date().toISOString();
+
+  const jsonLd = productJsonLd({
+    url: canonical,
+    name: [model.brand?.name, model.name].filter(Boolean).join(" "),
+    brand: model.brand?.name,
+    image: model.image_url || undefined,
+    description: aggregateSentence,
+    category: model.category ? String(model.category).replace(/_/g, " ") : undefined,
+    msrp: model.msrp,
+    avgRating: summary?.avg_rating,
+    reviewCount: reviews?.length ?? summary?.review_count ?? 0,
+    reviews: (reviews ?? []).map((r: any) => ({
+      author: r.profile?.display_name || r.profile?.username || null,
+      rating: r.rating,
+      body: r.content,
+      date: r.created_at,
+    })),
+    dateModified: updatedAt,
+  });
+
   return (
     <div className="min-h-screen bg-background">
+      <Helmet>
+        <title>{pageTitle}</title>
+        <meta name="description" content={pageDescription} />
+        <link rel="canonical" href={canonical} />
+        <meta property="og:title" content={pageTitle} />
+        <meta property="og:description" content={pageDescription} />
+        <meta property="og:url" content={canonical} />
+        <meta property="og:type" content="product" />
+        {model.image_url && <meta property="og:image" content={model.image_url} />}
+        <script type="application/ld+json">{JSON.stringify(jsonLd)}</script>
+      </Helmet>
       <Navbar />
       <main className="container mx-auto px-4 py-6 max-w-4xl">
         <Link to="/feed" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground mb-4">
           <ArrowLeft className="w-4 h-4" /> Back to feed
         </Link>
+
+        {/* Answer-first lead — quotable by AI crawlers */}
+        <p className="text-base md:text-lg text-foreground mb-6 leading-relaxed">{aggregateSentence}</p>
+
 
         {/* Header */}
         <div className="flex flex-col md:flex-row gap-6 mb-8">
@@ -177,7 +228,10 @@ const Model = () => {
           </div>
         )}
 
+        <p className="text-xs text-muted-foreground mt-8">Last updated {formatUpdated(updatedAt)}</p>
+
         <ReviewDetailModal review={selectedReview} open={!!selectedReview} onOpenChange={(o) => !o && setSelectedReview(null)} />
+
       </main>
     </div>
   );
