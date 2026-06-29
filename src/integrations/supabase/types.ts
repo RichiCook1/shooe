@@ -619,63 +619,90 @@ export type Database = {
       reviews: {
         Row: {
           ai_suggestions: Json | null
+          arch: string | null
           cleaned_at: string | null
           content: string | null
           content_en: string | null
           created_at: string
+          distance_focus: string | null
           distance_km: number | null
+          foot_shape: string | null
+          gait: string | null
+          goal: string | null
           guest_session_id: string | null
           id: string
+          injury_history: string | null
           is_guest: boolean | null
           location: string | null
           media_urls: string[] | null
           model_id: string
           original_language: string | null
+          race_seeded: boolean
           rating: number | null
           raw_transcript: string | null
           terrain: Database["public"]["Enums"]["terrain_type"] | null
           updated_at: string
           user_id: string | null
+          verified: boolean
+          weight_band: string | null
         }
         Insert: {
           ai_suggestions?: Json | null
+          arch?: string | null
           cleaned_at?: string | null
           content?: string | null
           content_en?: string | null
           created_at?: string
+          distance_focus?: string | null
           distance_km?: number | null
+          foot_shape?: string | null
+          gait?: string | null
+          goal?: string | null
           guest_session_id?: string | null
           id?: string
+          injury_history?: string | null
           is_guest?: boolean | null
           location?: string | null
           media_urls?: string[] | null
           model_id: string
           original_language?: string | null
+          race_seeded?: boolean
           rating?: number | null
           raw_transcript?: string | null
           terrain?: Database["public"]["Enums"]["terrain_type"] | null
           updated_at?: string
           user_id?: string | null
+          verified?: boolean
+          weight_band?: string | null
         }
         Update: {
           ai_suggestions?: Json | null
+          arch?: string | null
           cleaned_at?: string | null
           content?: string | null
           content_en?: string | null
           created_at?: string
+          distance_focus?: string | null
           distance_km?: number | null
+          foot_shape?: string | null
+          gait?: string | null
+          goal?: string | null
           guest_session_id?: string | null
           id?: string
+          injury_history?: string | null
           is_guest?: boolean | null
           location?: string | null
           media_urls?: string[] | null
           model_id?: string
           original_language?: string | null
+          race_seeded?: boolean
           rating?: number | null
           raw_transcript?: string | null
           terrain?: Database["public"]["Enums"]["terrain_type"] | null
           updated_at?: string
           user_id?: string | null
+          verified?: boolean
+          weight_band?: string | null
         }
         Relationships: [
           {
@@ -715,6 +742,42 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      segments: {
+        Row: {
+          category: string | null
+          created_at: string
+          description: string | null
+          filters: Json
+          id: string
+          slug: string
+          sort_order: number
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          category?: string | null
+          created_at?: string
+          description?: string | null
+          filters?: Json
+          id?: string
+          slug: string
+          sort_order?: number
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          category?: string | null
+          created_at?: string
+          description?: string | null
+          filters?: Json
+          id?: string
+          slug?: string
+          sort_order?: number
+          title?: string
+          updated_at?: string
+        }
+        Relationships: []
       }
       tags: {
         Row: {
@@ -763,7 +826,24 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      model_segment_stats: {
+        Row: {
+          avg_rating: number | null
+          model_id: string | null
+          review_count: number | null
+          segment_slug: string | null
+          segment_title: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "reviews_model_id_fkey"
+            columns: ["model_id"]
+            isOneToOne: false
+            referencedRelation: "models"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Functions: {
       claim_guest_reviews: {
