@@ -1,0 +1,1 @@
+ALTER VIEW public.model_segment_stats SET (security_invoker = on);
