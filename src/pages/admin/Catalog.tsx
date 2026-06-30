@@ -91,6 +91,7 @@ export default function AdminCatalog() {
 
   const selectBrand = (b: { id: string; name: string }) => {
     setBrandFilter(b);
+    setModelsPage(0);
     setTab("models");
   };
 
@@ -282,7 +283,7 @@ export default function AdminCatalog() {
           <span className="text-muted-foreground">Filtering by brand:</span>
           <Badge className="rounded-none gap-1">
             {brandFilter.name}
-            <button onClick={() => setBrandFilter(null)} className="ml-1 hover:opacity-70">×</button>
+            <button onClick={() => { setBrandFilter(null); setModelsPage(0); }} className="ml-1 hover:opacity-70">×</button>
           </Badge>
         </div>
       )}
