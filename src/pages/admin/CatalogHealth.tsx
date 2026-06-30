@@ -159,6 +159,7 @@ function JobDrawer({ jobId, onClose }: { jobId: string | null; onClose: () => vo
             const label = key === "__queue__" ? "Queue" : evs[0]?.model_name ?? key.slice(0, 8);
             const uploadEv = evs.find((e) => e.stage === "uploaded");
             const thumb = uploadEv?.data?.image_url;
+            const modelId = key === "__queue__" ? null : key;
             return (
               <div key={key} className="border border-border">
                 <div className="flex items-center gap-3 p-3 border-b border-border bg-muted/30">
@@ -168,6 +169,7 @@ function JobDrawer({ jobId, onClose }: { jobId: string | null; onClose: () => vo
                     {key !== "__queue__" && <div className="text-[10px] text-muted-foreground font-mono">{key}</div>}
                   </div>
                 </div>
+                {modelId && <ManualImagePaste modelId={modelId} />}
                 <div className="divide-y divide-border">
                   {evs.map((e) => <EventRow key={e.id} ev={e} />)}
                 </div>
