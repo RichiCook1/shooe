@@ -264,6 +264,61 @@ function EventRow({ ev }: { ev: any }) {
   );
 }
 
+function ManualImagePaste({ modelId }: { modelId: string }) {
+  const [url, setUrl] = useState("");
+  const [source, setSource] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [preview, setPreview] = useState<string | null>(null);
+
+  const save = async () => {
+    const trimmed = url.trim();
+    if (!trimmed) { toast.error("Paste an image URL"); return; }
+    try { new URL(trimmed); } catch { toast.error("Invalid URL"); return; }
+    setSaving(true);
+    const { error } = await supabase
+      .from("models")
+      .update({
+        image_url: trimmed,
+        image_source_url: source.trim() || trimmed,
+        pending_review: false,
+        verified: true,
+      })
+      .eq("id", modelId);
+    setSaving(false);
+    if (error) { toast.error(error.message); return; }
+    setPreview(trimmed);
+    toast.success("Image saved to model");
+  };
+
+  return (
+    <div className="p-3 border-b border-border bg-muted/10 space-y-2">
+      <div className="flex items-center gap-1 text-[10px] uppercase tracking-wider text-muted-foreground">
+        <LinkIcon className="w-3 h-3" /> Paste image URL manually
+      </div>
+      <div className="flex flex-col sm:flex-row gap-2">
+        <Input
+          value={url}
+          onChange={(e) => setUrl(e.target.value)}
+          placeholder="https://…/shoe.jpg"
+          className="rounded-none h-8 text-xs"
+        />
+        <Input
+          value={source}
+          onChange={(e) => setSource(e.target.value)}
+          placeholder="Source page URL (optional)"
+          className="rounded-none h-8 text-xs"
+        />
+        <Button size="sm" disabled={saving} onClick={save} className="rounded-none h-8">
+          {saving ? "Saving…" : "Save"}
+        </Button>
+      </div>
+      {preview && (
+        <img src={preview} alt="" className="w-24 h-24 object-contain bg-white border border-green-500" />
+      )}
+    </div>
+  );
+}
+
 function Stat({ label, value }: { label: string; value: number | string }) {
   return (
     <Card className="rounded-none border-border p-4">
