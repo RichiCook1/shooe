@@ -91,6 +91,7 @@ export default function AdminCatalog() {
 
   const selectBrand = (b: { id: string; name: string }) => {
     setBrandFilter(b);
+    setModelsPage(0);
     setTab("models");
   };
 
