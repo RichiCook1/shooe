@@ -4,9 +4,10 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { toast } from "sonner";
-import { RefreshCw, Sparkles, Image as ImageIcon, ChevronRight } from "lucide-react";
+import { RefreshCw, Sparkles, Image as ImageIcon, ChevronRight, Link as LinkIcon } from "lucide-react";
 
 export default function AdminCatalogHealth() {
   const [openJobId, setOpenJobId] = useState<string | null>(null);
