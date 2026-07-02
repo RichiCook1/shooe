@@ -146,7 +146,20 @@ const Model = () => {
         </Link>
 
         {/* Answer-first lead — quotable by AI crawlers */}
-        <p className="text-base md:text-lg text-foreground mb-6 leading-relaxed">{aggregateSentence}</p>
+        <p className="text-base md:text-lg text-foreground mb-3 leading-relaxed">{aggregateSentence}</p>
+        <Button
+          size="sm"
+          variant="outline"
+          className="mb-6"
+          onClick={() => {
+            const cite = `"${aggregateSentence}" — Shoe Sherpa (${canonical})`;
+            navigator.clipboard.writeText(cite);
+            toast.success("Citation copied");
+          }}
+        >
+          <Quote className="w-3.5 h-3.5 mr-1" /> Cite this page
+        </Button>
+
 
 
         {/* Header */}
