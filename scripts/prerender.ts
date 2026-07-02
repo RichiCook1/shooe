@@ -234,15 +234,69 @@ async function prerenderModels() {
       })
       .join("");
 
+    // Sibling comparison: same brand + category, closest by stack or msrp.
+    const siblings = models
+      .filter((x: any) =>
+        x.id !== m.id &&
+        x.brand?.id === m.brand?.id &&
+        x.category === m.category,
+      )
+      .sort((a: any, b: any) => {
+        const ref = m.stack_height_mm ?? m.msrp ?? 0;
+        const key = (x: any) => Math.abs((x.stack_height_mm ?? x.msrp ?? 0) - ref);
+        return key(a) - key(b);
+      })
+      .slice(0, 2);
+
+    const compareRows = [m, ...siblings]
+      .map((x: any) => {
+        const nm = [x.brand?.name, x.name].filter(Boolean).join(" ");
+        const sx = summaryMap.get(x.id) as any;
+        return `<tr>
+          <td><a href="/model/${x.id}">${esc(nm)}</a></td>
+          <td>${sx?.avg_rating != null ? Number(sx.avg_rating).toFixed(1) + "/10" : "—"}</td>
+          <td>${sx?.review_count ?? 0}</td>
+          <td>${x.weight_g ? x.weight_g + "g" : "—"}</td>
+          <td>${x.stack_height_mm ? x.stack_height_mm + "mm" : "—"}</td>
+          <td>${x.drop_mm != null ? x.drop_mm + "mm" : "—"}</td>
+          <td>${x.msrp ? "$" + x.msrp : "—"}</td>
+        </tr>`;
+      })
+      .join("");
+
+    const compareHtml = siblings.length
+      ? `<h2>Compare with siblings</h2>
+        <table>
+          <thead><tr><th>Shoe</th><th>Rating</th><th>Reviews</th><th>Weight</th><th>Stack</th><th>Drop</th><th>MSRP</th></tr></thead>
+          <tbody>${compareRows}</tbody>
+        </table>`
+      : "";
+
+    const prosHtml = topPros.length
+      ? `<h3>Most-cited pros</h3><ul>${topPros.map((p) => `<li>${esc(p)}</li>`).join("")}</ul>`
+      : "";
+    const consHtml = topCons.length
+      ? `<h3>Most-cited cons</h3><ul>${topCons.map((p) => `<li>${esc(p)}</li>`).join("")}</ul>`
+      : "";
+
+    const pullQuoteHtml = pullQuote
+      ? `<blockquote cite="${url}"><p>"${esc(String(pullQuote.content).slice(0, 400))}"</p><footer>— ${esc(pullQuote.profile?.display_name || pullQuote.profile?.username || "Verified runner")}${pullQuote.rating ? `, rated ${pullQuote.rating}/10` : ""}</footer></blockquote>`
+      : "";
+
     const body = `
       <main>
         ${brandName ? `<p><a href="/brand/${m.brand?.id}">${esc(brandName)}</a></p>` : ""}
         <h1>${esc(fullName)}</h1>
         <p>${esc(lead)}</p>
         ${s?.summary ? `<p>${esc(s.summary)}</p>` : ""}
-        ${specs ? `<ul>${specs}</ul>` : ""}
+        ${pullQuoteHtml}
+        ${specs ? `<h2>Specs</h2><ul>${specs}</ul>` : ""}
+        ${prosHtml}
+        ${consHtml}
+        ${compareHtml}
         <h2>Verified reviews (${rs.filter((r) => r.content).length})</h2>
         ${reviewsHtml || "<p>No reviews yet for this shoe.</p>"}
+        <p><small>Cite: "${esc(lead)}" — Shoe Sherpa, ${url}</small></p>
         <p><small>Last updated ${(m.updated_at || new Date().toISOString()).slice(0, 10)}</small></p>
       </main>
     `;
