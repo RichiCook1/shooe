@@ -8,7 +8,8 @@ import ReviewCard from "@/components/ReviewCard";
 import ReviewDetailModal from "@/components/ReviewDetailModal";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Sparkles } from "lucide-react";
+import { ArrowLeft, Sparkles, Quote } from "lucide-react";
+import { toast } from "sonner";
 import { getStorageThumb } from "@/lib/imageCompression";
 import { shoeAggregateSentence, formatUpdated } from "@/lib/segmentStats";
 import { productJsonLd } from "@/lib/jsonld";
@@ -145,7 +146,20 @@ const Model = () => {
         </Link>
 
         {/* Answer-first lead — quotable by AI crawlers */}
-        <p className="text-base md:text-lg text-foreground mb-6 leading-relaxed">{aggregateSentence}</p>
+        <p className="text-base md:text-lg text-foreground mb-3 leading-relaxed">{aggregateSentence}</p>
+        <Button
+          size="sm"
+          variant="outline"
+          className="mb-6"
+          onClick={() => {
+            const cite = `"${aggregateSentence}" — Shoe Sherpa (${canonical})`;
+            navigator.clipboard.writeText(cite);
+            toast.success("Citation copied");
+          }}
+        >
+          <Quote className="w-3.5 h-3.5 mr-1" /> Cite this page
+        </Button>
+
 
 
         {/* Header */}

@@ -76,11 +76,53 @@ function writeFile(relPath: string, content: string) {
   writeFileSync(out, content);
 }
 
-function shoeSentence(brand: string | null, model: string, count: number, avg: number | null) {
+function shoeSentence(
+  brand: string | null,
+  model: string,
+  count: number,
+  avg: number | null,
+  topPro?: string | null,
+  topCon?: string | null,
+) {
   const name = [brand, model].filter(Boolean).join(" ");
   if (!count) return `${name} doesn't have community reviews yet — be the first to rate it.`;
   const rating = avg != null ? `averages ${Number(avg).toFixed(1)}/10` : "is rated by the community";
-  return `Across ${count} verified review${count === 1 ? "" : "s"}, the ${name} ${rating}.`;
+  const tail =
+    topPro && topCon
+      ? ` Most-cited pro: "${topPro}". Most-cited con: "${topCon}".`
+      : topPro
+        ? ` Most-cited pro: "${topPro}".`
+        : "";
+  return `Across ${count} verified review${count === 1 ? "" : "s"}, the ${name} ${rating}.${tail}`;
+}
+
+// Lightweight phrase-frequency extraction from review bodies. Not perfect —
+// picks the most common 2-3 word noun-ish phrases after stopword removal.
+const STOP = new Set(("the a an of and or but if to in on for with is are was were be been being " +
+  "this that these those i you he she it we they me him her us them my your his its our their " +
+  "not no yes so then just very really too much more most less least all some any each every " +
+  "have has had do does did will would could should can may might must about after before " +
+  "from into over under between while during than then also feel felt feels shoe shoes running run runs " +
+  "wear wore worn get got gets pair pairs mile miles km kms one two three four five ")
+  .split(/\s+/));
+
+function extractPhrases(texts: string[], n = 3): string[] {
+  const counts = new Map<string, number>();
+  for (const t of texts) {
+    const words = String(t).toLowerCase().replace(/[^a-z\s]/g, " ").split(/\s+/).filter(Boolean);
+    for (let i = 0; i < words.length - 1; i++) {
+      const w1 = words[i], w2 = words[i + 1];
+      if (STOP.has(w1) || STOP.has(w2)) continue;
+      if (w1.length < 3 || w2.length < 3) continue;
+      const bigram = `${w1} ${w2}`;
+      counts.set(bigram, (counts.get(bigram) ?? 0) + 1);
+    }
+  }
+  return [...counts.entries()]
+    .filter(([, c]) => c >= 2)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, n)
+    .map(([p]) => p);
 }
 
 async function prerenderModels() {
@@ -111,9 +153,23 @@ async function prerenderModels() {
     const fullName = [brandName, m.name].filter(Boolean).join(" ");
     const url = `${SITE}/model/${m.id}`;
     const reviewCount = s?.review_count ?? rs.length;
-    const lead = shoeSentence(brandName, m.name, reviewCount, s?.avg_rating ?? null);
+
+    // Extract top phrases from positive vs negative reviews for the lead.
+    const positives = rs.filter((r: any) => r.content && (r.rating ?? 0) >= 7);
+    const negatives = rs.filter((r: any) => r.content && (r.rating ?? 0) > 0 && (r.rating ?? 0) < 6);
+    const topPros = extractPhrases(positives.map((r: any) => r.content));
+    const topCons = extractPhrases(negatives.map((r: any) => r.content));
+    const topPro = topPros[0] ?? null;
+    const topCon = topCons[0] ?? null;
+
+    const lead = shoeSentence(brandName, m.name, reviewCount, s?.avg_rating ?? null, topPro, topCon);
     const title = `${fullName} Review (2026) — Shoe Sherpa`;
     const desc = lead.slice(0, 158);
+
+    // Pull-quote: highest-rated verified review with real text.
+    const pullQuote = [...rs]
+      .filter((r: any) => r.content && String(r.content).trim().length >= 40)
+      .sort((a: any, b: any) => (b.rating ?? 0) - (a.rating ?? 0))[0];
 
     modelIndex.push({ id: m.id, name: fullName, brand: brandName, count: reviewCount });
 
@@ -178,15 +234,69 @@ async function prerenderModels() {
       })
       .join("");
 
+    // Sibling comparison: same brand + category, closest by stack or msrp.
+    const siblings = models
+      .filter((x: any) =>
+        x.id !== m.id &&
+        x.brand?.id === m.brand?.id &&
+        x.category === m.category,
+      )
+      .sort((a: any, b: any) => {
+        const ref = m.stack_height_mm ?? m.msrp ?? 0;
+        const key = (x: any) => Math.abs((x.stack_height_mm ?? x.msrp ?? 0) - ref);
+        return key(a) - key(b);
+      })
+      .slice(0, 2);
+
+    const compareRows = [m, ...siblings]
+      .map((x: any) => {
+        const nm = [x.brand?.name, x.name].filter(Boolean).join(" ");
+        const sx = summaryMap.get(x.id) as any;
+        return `<tr>
+          <td><a href="/model/${x.id}">${esc(nm)}</a></td>
+          <td>${sx?.avg_rating != null ? Number(sx.avg_rating).toFixed(1) + "/10" : "—"}</td>
+          <td>${sx?.review_count ?? 0}</td>
+          <td>${x.weight_g ? x.weight_g + "g" : "—"}</td>
+          <td>${x.stack_height_mm ? x.stack_height_mm + "mm" : "—"}</td>
+          <td>${x.drop_mm != null ? x.drop_mm + "mm" : "—"}</td>
+          <td>${x.msrp ? "$" + x.msrp : "—"}</td>
+        </tr>`;
+      })
+      .join("");
+
+    const compareHtml = siblings.length
+      ? `<h2>Compare with siblings</h2>
+        <table>
+          <thead><tr><th>Shoe</th><th>Rating</th><th>Reviews</th><th>Weight</th><th>Stack</th><th>Drop</th><th>MSRP</th></tr></thead>
+          <tbody>${compareRows}</tbody>
+        </table>`
+      : "";
+
+    const prosHtml = topPros.length
+      ? `<h3>Most-cited pros</h3><ul>${topPros.map((p) => `<li>${esc(p)}</li>`).join("")}</ul>`
+      : "";
+    const consHtml = topCons.length
+      ? `<h3>Most-cited cons</h3><ul>${topCons.map((p) => `<li>${esc(p)}</li>`).join("")}</ul>`
+      : "";
+
+    const pullQuoteHtml = pullQuote
+      ? `<blockquote cite="${url}"><p>"${esc(String(pullQuote.content).slice(0, 400))}"</p><footer>— ${esc(pullQuote.profile?.display_name || pullQuote.profile?.username || "Verified runner")}${pullQuote.rating ? `, rated ${pullQuote.rating}/10` : ""}</footer></blockquote>`
+      : "";
+
     const body = `
       <main>
         ${brandName ? `<p><a href="/brand/${m.brand?.id}">${esc(brandName)}</a></p>` : ""}
         <h1>${esc(fullName)}</h1>
         <p>${esc(lead)}</p>
         ${s?.summary ? `<p>${esc(s.summary)}</p>` : ""}
-        ${specs ? `<ul>${specs}</ul>` : ""}
+        ${pullQuoteHtml}
+        ${specs ? `<h2>Specs</h2><ul>${specs}</ul>` : ""}
+        ${prosHtml}
+        ${consHtml}
+        ${compareHtml}
         <h2>Verified reviews (${rs.filter((r) => r.content).length})</h2>
         ${reviewsHtml || "<p>No reviews yet for this shoe.</p>"}
+        <p><small>Cite: "${esc(lead)}" — Shoe Sherpa, ${url}</small></p>
         <p><small>Last updated ${(m.updated_at || new Date().toISOString()).slice(0, 10)}</small></p>
       </main>
     `;

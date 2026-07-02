@@ -10,7 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
-import { CheckCircle2, XCircle, Loader2, ExternalLink, Trash2, Play } from "lucide-react";
+import { CheckCircle2, XCircle, Loader2, ExternalLink, Trash2, Play, Sparkles, Radio } from "lucide-react";
 
 const BOT_NAMES = [
   "GPTBot", "OAI-SearchBot", "ChatGPT-User",
@@ -274,7 +274,7 @@ export default function LlmVisibility() {
 
           <Card>
             <CardHeader><CardTitle className="text-base">Add probe</CardTitle></CardHeader>
-            <CardContent>
+            <CardContent className="space-y-3">
               <form
                 onSubmit={(e) => { e.preventDefault(); if (newQ.trim()) addProbe.mutate(newQ.trim()); }}
                 className="flex gap-2"
@@ -282,8 +282,41 @@ export default function LlmVisibility() {
                 <Input value={newQ} onChange={(e) => setNewQ(e.target.value)} placeholder="e.g. Best carbon race shoes 2026" />
                 <Button type="submit" disabled={!newQ.trim() || addProbe.isPending}>Add</Button>
               </form>
+              <div className="flex flex-wrap gap-2 pt-2 border-t border-border">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={async () => {
+                    const t = toast.loading("Seeding long-tail probes…");
+                    const { data, error } = await supabase.functions.invoke("seed-longtail-probes", { body: { top_n: 40 } });
+                    toast.dismiss(t);
+                    if (error) return toast.error(error.message);
+                    toast.success(`Seeded ${data?.inserted ?? 0} new probes (skipped ${data?.skipped_duplicates ?? 0} dupes)`);
+                    qc.invalidateQueries({ queryKey: ["citation-probes"] });
+                  }}
+                >
+                  <Sparkles className="w-3.5 h-3.5 mr-1" /> Seed long-tail probes (top 40 models × 6 queries)
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={async () => {
+                    const t = toast.loading("Pinging IndexNow…");
+                    const { data, error } = await supabase.functions.invoke("ping-indexnow", {
+                      body: { urls: ["https://shoe-sherpa.com/", "https://shoe-sherpa.com/sitemap.xml"] },
+                    });
+                    toast.dismiss(t);
+                    if (error) return toast.error(error.message);
+                    toast.success(`IndexNow → status ${data?.status}`);
+                  }}
+                >
+                  <Radio className="w-3.5 h-3.5 mr-1" /> Ping IndexNow (Bing/Copilot)
+                </Button>
+              </div>
             </CardContent>
           </Card>
+
+
 
           <Card>
             <CardHeader><CardTitle className="text-base">Probes</CardTitle></CardHeader>

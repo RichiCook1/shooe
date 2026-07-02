@@ -1,84 +1,79 @@
-## Goal
+# Getting Shoe Sherpa cited by LLMs
 
-Give you a single admin page — `/admin/llm-visibility` — that answers two questions:
+You already shipped the technical foundation (prerendered pages, .md twins, MCP server, robots/llms.txt, JSON-LD). LLMs still aren't citing you for one core reason: **citation is a function of authority + uniqueness + freshness**, not just crawlability. Being crawlable makes you eligible; being *quoted* requires signals the models trust.
 
-1. **Are AI crawlers actually fetching our pages?** (GPTBot, PerplexityBot, ClaudeBot, Google-Extended, OAI-SearchBot, ChatGPT-User, etc.)
-2. **When someone asks a running-shoe question, do LLMs cite shoe-sherpa.com?**
+Here's a concrete, phased plan — ordered by impact.
 
-Two independent signals, one dashboard.
+## Why we're not being cited (diagnosis)
 
----
+1. **No inbound authority.** Perplexity/ChatGPT rank sources partly by domain authority and by whether they show up in Google/Bing top results. A brand-new domain with ~0 backlinks is filtered out even if it has the best content.
+2. **Content isn't uniquely quotable.** Aggregate sentences exist but read like every other review site. LLMs prefer sources with *proprietary data* (numbers, quotes, stats) they can't get elsewhere.
+3. **Not indexed by Google/Bing yet.** Perplexity and ChatGPT Search largely re-rank Google/Bing SERPs. If you're not on page 1 for a query, you won't be cited for it.
+4. **No entity presence.** LLMs cite sites they "know" — Wikipedia, Reddit, YouTube, brand sites. Shoe Sherpa isn't yet a recognized entity.
+5. **Query mismatch.** Probes may be too generic ("best marathon shoes") — you can't out-rank Runner's World on those. Long-tail segment queries are winnable first.
 
-## Part 1 — AI crawler hit log (passive)
+## Phase 1 — Make what we have actually findable (this week)
 
-**How it works:** every request to the site goes through Vite in dev / the static host in prod. We can't intercept static hits at that layer, so instead we add a tiny **client-side beacon** that fires only when the User-Agent matches a known AI bot pattern *and* JS runs (some AI crawlers do execute JS — Google-Extended, ChatGPT-User, PerplexityBot on preview fetches). For non-JS crawlers, we lean on the MCP server and edge functions where we *do* control the runtime.
+**1a. Verify indexing & submit sitemap**
+- Submit `sitemap.xml` to Google Search Console and Bing Webmaster Tools.
+- Run URL Inspection on 5–10 top model pages; request indexing for any not indexed.
+- Add Bing IndexNow ping in the deploy pipeline (one HTTP call per changed URL — instant Bing/Copilot ingestion).
 
-Realistically the strongest signal is: **log every hit to the MCP endpoint, the `.md` twins served through an edge function, and any prerendered page beacon**.
+**1b. Refocus citation probes to winnable queries**
+- Replace generic probes ("best carbon race shoes") with long-tail segment queries you actually cover uniquely:
+  - "Hoka Bondi 9 for flat feet reviews"
+  - "Nike Pegasus 41 vs Brooks Ghost 16 wide feet"
+  - "Best trail shoes for 50k with wide toe box"
+- Add ~30 probes matching your top-reviewed models × segments.
+- These are the queries where a small niche site can beat Runner's World.
 
-Concrete pieces:
-- New table `llm_crawler_hits` (ts, user_agent, bot_name, path, referer, ip_hash, source: 'mcp'|'beacon'|'md').
-- Wrap the `mcp` edge function to insert one row per call (tool name + args go in metadata).
-- New edge function `md-proxy` that serves the `.md` twins from `dist/` (or from Supabase Storage) and logs the hit with UA parsing. Update `llms.txt` + sitemap to point `.md` URLs at `/functions/v1/md-proxy?path=...` (or add a simple rewrite).
-- Add a `<script>` beacon in `index.html` that POSTs `{ua, path}` to a `log-crawler-hit` edge function only when `navigator.userAgent` matches the bot regex. Cheap, no PII beyond hashed IP.
+**1c. Fix the "unique data" gap in prerendered HTML**
+- Every model page's lead sentence should include a **number no one else has**: "Based on 47 verified runner reviews, avg 4.2/5, most-cited pro: 'plush heel', most-cited con: 'narrow toe box'."
+- Add a `<blockquote>` of the single highest-rated verified review verbatim, with reviewer's gait/foot shape as attribution — LLMs love pull-quotes.
+- Add a small comparison table (this model vs 2 closest siblings) on every model page — tables get quoted heavily.
 
-Dashboard view:
-- Table of hits (bot, path, time, count).
-- Chart: hits per bot per day (last 30d).
-- Top pages crawled.
-- "Last seen" per bot.
+## Phase 2 — Build entity + authority signals (next 2–4 weeks)
 
-## Part 2 — Citation probes (active)
+**2a. Wikipedia-adjacent presence**
+- Create/claim entries on: Wikidata (Shoe Sherpa as an organization), Crunchbase, Product Hunt launch, G2/Capterra if applicable.
+- These are the sources LLMs cross-reference to decide "is this a real thing?"
 
-Weekly cron edge function `probe-llm-citations` that runs a curated list of ~30 questions (stored in a new `citation_probes` table) through Perplexity's API (we already have `PERPLEXITY_API_KEY`) and records whether `shoe-sherpa.com` appears in the returned `citations[]`.
+**2b. Reddit + YouTube distribution**
+- Reddit is *the* top-cited source for both Perplexity and ChatGPT on running-shoe questions. Post genuinely helpful, non-spammy segment analyses in r/RunningShoeGeeks, r/RunningCirclejerk, r/AdvancedRunning — link to Shoe Sherpa segment pages as data source, not as a plug.
+- Publish 5–10 short YouTube videos (one per top segment page) with the URL in the description. YouTube transcripts get ingested.
 
-- Table `citation_probe_runs`: probe_id, run_at, model, answer_text, cited_urls (jsonb), was_cited (bool), position (int|null).
-- Seed probes: "best marathon shoes for wide feet", "how is the Nike Pegasus 41", "trail shoes under 100km", etc. — editable in the admin UI.
-- Cron: weekly via `pg_cron` + `pg_net` calling the edge function.
-- Optional: also probe **OpenAI web-search** (`gpt-4o-search-preview` via Lovable AI gateway) and ChatGPT-shared results. Skip Claude / Google AI Overviews for v1 — no public citation API.
+**2c. Cite-worthy proprietary content**
+- Publish a monthly "State of Running Shoes" post using aggregated data from your DB (e.g. "Wide-foot mentions up 34% in Q2 reviews"). This is exactly the kind of statistic LLMs quote because no one else has it.
+- Add an `Article` JSON-LD schema and `datePublished`/`dateModified` — freshness matters for GPT-5/Perplexity.
 
-Dashboard view:
-- Citation rate over time (% of probes citing us, weekly).
-- Per-probe history: green tick when cited, red X when not, with the answer text expandable.
-- "New citations this week" and "Lost citations" callouts.
-- Button to run a probe on-demand.
+**2d. Get 10 real backlinks**
+- Guest posts on running blogs, podcast interviews, HARO responses about running shoes, /r/running weekly threads. Aim for 10 dofollow links from DR>30 domains. This alone moves the needle more than any on-site change.
 
-## Part 3 — Manual check helpers (in the same page)
+## Phase 3 — Instrument and iterate (ongoing)
 
-A small "Manual checks" card listing one-click links that open pre-filled prompts in each LLM:
-- Perplexity share URL with `?q=best+trail+shoes+2026`
-- ChatGPT `https://chat.openai.com/?q=...`
-- Google AI Mode URL
-- Claude — no URL param, just instructions.
+**3a. Expand the probe grid**
+- Add a "long-tail probe generator" in `probe-llm-citations` that auto-creates one probe per (top-50 model × top-10 segment) and runs monthly. This gives statistical signal on which queries convert.
 
-Plus the exact Google Search Console filter to see impressions from AI Overviews (`Search appearance = AI Overviews`), noted in a tooltip.
+**3b. Track SERP position alongside citation**
+- Extend the LLM Visibility page with a "Google position" column (via SerpAPI) per probe query. Correlation: if you're not top 10 on Google, you won't be cited by Perplexity.
 
----
+**3c. Add a "cite this" affordance**
+- On each model page, add a visible "Cite this page" button that copies a formatted quote + URL. Journalists and Reddit posters actually use these, which creates natural backlinks.
 
-## Technical details
+## Technical work items (for build mode)
 
-**Files:**
-- Migration: `llm_crawler_hits`, `citation_probes`, `citation_probe_runs` tables + RLS (admin-only read, service-role write) + GRANTs.
-- Edge functions:
-  - `log-crawler-hit` — public POST, hashes IP, parses UA, inserts row.
-  - `probe-llm-citations` — service-role, iterates probes, calls Perplexity, stores runs.
-  - `md-proxy` (optional) — serves `.md` twins + logs; skip if we can't easily route around the static host.
-  - Modify `supabase/functions/mcp/index.ts` to log each call.
-- Cron: `pg_cron` job calling `probe-llm-citations` weekly (Sundays 03:00 UTC).
-- Frontend:
-  - `src/pages/admin/LlmVisibility.tsx` — three sections (Crawler hits, Citation probes, Manual checks).
-  - Add nav entry in `src/components/admin/AdminSidebar.tsx`.
-  - Add beacon `<script>` in `index.html` (bot-UA regex only).
+Small, concrete changes I'll ship when you approve:
 
-**Bot UA regex (single source of truth, used by beacon + parser):**
-`/(GPTBot|OAI-SearchBot|ChatGPT-User|PerplexityBot|Perplexity-User|ClaudeBot|Claude-Web|Anthropic-AI|Google-Extended|Googlebot|Bingbot|CCBot|YouBot|Applebot-Extended|Amazonbot|meta-externalagent)/i`
+1. `scripts/prerender.ts` — enrich model-page lead paragraph with top-pro/top-con phrases (extracted from reviews) and a verbatim pull-quote block.
+2. `scripts/prerender.ts` — add a sibling-comparison HTML table (same category, closest stack/drop).
+3. New edge function `ping-indexnow` triggered by prerender to notify Bing/Yandex of changed URLs.
+4. New admin action "Seed long-tail probes" that inserts ~50 model×segment probes.
+5. `src/pages/admin/LlmVisibility.tsx` — add SerpAPI Google-position column per probe.
+6. New public route `/insights/:slug` for monthly data posts (Article schema, dateModified), with a starter post generated from current DB.
+7. Model page "Cite this" button (copy-to-clipboard with formatted attribution).
 
-**Cost:** Perplexity probes are ~$0.005/query — 30 probes/week ≈ $0.60/month. Negligible.
+## What I need from you
 
-**Not in scope:**
-- Historical data before we ship this (we have none).
-- ChatGPT / Claude direct citation tracking (no API for their web answers). Perplexity + Google are the practical proxies.
-- Google Search Console API integration — the manual link is enough for v1.
-
----
-
-Reply **approve** to build it, or say which parts to drop / add.
+- Which phase do you want to start with? (I'd recommend Phase 1 in full + item #6 from Phase 2 — that's the highest-leverage code work.)
+- Do you have a SerpAPI key already (used for Lens)? If yes I can reuse it for Google-position tracking.
+- Are you willing to do the non-code work (GSC/Bing submission, Reddit posts, backlink outreach)? Without it, the code changes alone won't get you cited — they'll just make you *eligible*.
