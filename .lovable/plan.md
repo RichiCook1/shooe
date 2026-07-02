@@ -1,103 +1,76 @@
 ## Goal
-Make Shoe Sherpa's public content visible to search engines and AI crawlers (ChatGPT, Perplexity, Claude, Gemini, Google AI Overviews) without rebuilding the SPA or resetting the database.
-
-## Approach
-Build-time **prerendering** of public routes — the SPA stays, but every public URL ships full HTML (review content, aggregate sentences, JSON-LD) before JavaScript runs. Plus a new `/best/[segment]` page family backed by a curated list of high-value segment combos.
+Maximize how much of Shoe Sherpa's review corpus LLMs (ChatGPT, Perplexity, Claude, Google AI Overviews, agentic clients) can actually ingest and cite. Three complementary channels: fatter static HTML, machine-friendly markdown dumps, and a live MCP server for tool-using agents.
 
 ---
 
-## 1. Prerendering pipeline (foundation)
+## 1. Prerender all reviews per model (not just 5)
 
-- Add a Node script `scripts/prerender.ts` run as a `postbuild` step.
-- After Vite builds, the script:
-  1. Reads `dist/index.html` as the shell.
-  2. Fetches data from Supabase via the anon client for: all published `models`, all `brands`, the curated segment list, and the homepage feed snapshot.
-  3. For each route, renders a static HTML body server-side (no React DOM render — a plain string template using the fetched data) and writes `dist/model/<id>/index.html`, `dist/brand/<id>/index.html`, `dist/best/<slug>/index.html`, etc.
-  4. Each generated file contains the full review text, aggregate sentence, JSON-LD, `<link rel="canonical">`, `Last updated` date, and the same `<div id="root">` + script tags so React hydrates normally for users.
-- The static body lives inside `<div id="root">…prerendered HTML…</div>`. React replaces it on hydration; crawlers + JS-off users see it directly.
-- Routes prerendered: `/`, `/feed`, `/model/:id`, `/brand/:id`, `/best/:slug`. Auth-only routes (`/profile`, `/messages`, `/admin/*`, `/review`) are skipped.
-- Interactive `/sherpa` advisor stays client-only as you requested.
+Currently `scripts/prerender.ts` embeds up to 5 reviews per model in JSON-LD + visible HTML. Change it so **every review** ships in the static HTML for `/model/:id`.
 
-**Verification:** `curl https://shoe-sherpa.com/model/<id>` returns review text and JSON-LD.
+- Drop the `limit: 2000` global fetch; page through `reviews` in batches of 1000 keyed by `model_id` so every published review is included.
+- HTML body: render all reviews as a list (author, rating, date, full text) below the aggregate lead. Long pages are fine — crawlers prefer one deep URL over pagination.
+- JSON-LD stays capped at 5 `Review` nodes (schema.org convention — more triggers Google warnings), but the full set lives in the visible `<article>` block so LLMs still see it.
+- Same treatment for `/brand/:id`: include all models with their aggregate sentences.
 
-## 2. Schema additions (additive, no data loss)
+**Verification:** `curl https://shoe-sherpa.com/model/<id> | grep -c '<article class="review"'` returns the full review count.
 
-Add nullable columns to `reviews` if missing: `gait`, `foot_shape`, `arch`, `terrain`, `distance_focus`, `goal`, `weight_band`, `injury_history`, `verified` (bool), `race_seeded` (bool). All default null/false — existing rows untouched.
+## 2. Per-model markdown dump at `/model/:id.md`
 
-Add a SQL view `model_segment_stats` returning `(model_id, segment_key, review_count, avg_rating, top_attribute)` for any (shoe × segment) with ≥10 reviews. Used by segment pages.
+Perplexity, Claude web-fetch, and many agent tools prefer clean markdown over parsing HTML. Ship a plaintext-markdown twin of every prerendered page.
 
-Add a `segments` table seeded with the curated 20–40 combos (slug, title, filter JSON, description). Editable later from admin.
+- Extend `scripts/prerender.ts` to also write `dist/model/<id>.md`, `dist/brand/<id>.md`, `dist/best/<slug>.md`.
+- Content per model: H1 name, aggregate sentence, spec table, then every review as `### <author> — <rating>/10` followed by the body.
+- Add a `/models.md` index listing every model with its markdown URL, so an LLM given `https://shoe-sherpa.com/models.md` can crawl the whole catalog cheaply.
+- Update `public/llms.txt` to advertise the `.md` variants and `/models.md` index.
+- Update `robots.txt` to explicitly allow `.md` (no change needed for `*` but note it).
+- Sitemap: add the `.md` URLs alongside the HTML URLs.
 
-## 3. Answer-first shoe pages
+**Verification:** `curl https://shoe-sherpa.com/model/<id>.md` returns markdown, not HTML.
 
-Update `src/pages/Model.tsx` so the first rendered block is a one-sentence verdict built from `model_summaries` + review count + top tag, e.g. *"Across 128 verified reviews, the Nike Pegasus 41 averages 4.3/5, rated strongest for daily training by neutral runners."* This sentence is plain `<p>` text (not inside a chart), so the prerender script captures it.
+## 3. MCP server exposing the review corpus
 
-Add `Last updated <date>` visible footer + `dateModified` in JSON-LD.
+Build a Model Context Protocol server so tool-using agents (Claude Desktop, ChatGPT with connectors, Cursor, etc.) can query the review database live instead of scraping.
 
-JSON-LD (`Product` + `AggregateRating` + up to 5 `Review` nodes) injected via `react-helmet-async` AND mirrored into the prerendered HTML.
+Use `@lovable.dev/mcp-js` — authored in `src/lib/mcp/`, auto-bundled into a Supabase edge function at `/functions/v1/mcp`. Public (no auth) since all data is already public.
 
-## 4. Segment pages — `/best/:slug`
+**Tools exposed:**
+- `search_models({ query, category?, brand? })` → list of matching models with id, name, brand, avg rating, review count.
+- `get_model({ model_id })` → full spec sheet + aggregate + up to 20 reviews.
+- `list_reviews({ model_id, limit?, offset? })` → paginate all reviews for a model.
+- `best_for({ segment_slug })` → ranked shortlist from `model_segment_stats`.
+- `get_brand_facts({ brand_id })` → verified brand notes (same source Sherpa uses).
 
-New route + page `src/pages/BestFor.tsx`. Loads `segments` row + ranked top 3–5 models from `model_segment_stats`. Renders:
-- H1 *"Best [category] for [need] (2026)"*
-- Lead quotable sentence with N + price + score + attribute
-- Ranked list, each shoe linking to `/model/:id` with its own evidence sentence
-- Cross-links to related segments
-- `ItemList` JSON-LD
+Each tool reads from Supabase via the service role (server-side only, read-only queries). No user-scoped data.
 
-Curated seed list of ~30 combos written as a migration insert (we can edit/extend later from admin).
+**Discovery:** add the MCP URL to `llms.txt` and a `<link rel="mcp">` tag pointing at the endpoint so agents can auto-discover it.
 
-## 5. Crawl files + freshness
-
-- `public/robots.txt`: explicit `Allow: /` blocks for GPTBot, OAI-SearchBot, ChatGPT-User, PerplexityBot, ClaudeBot, Claude-Web, Google-Extended, Googlebot, Bingbot + `Sitemap:` directive.
-- `scripts/generate-sitemap.ts` (run in `prebuild`): pulls every model, brand, segment from Supabase with `lastmod` from `updated_at`.
-- `public/llms.txt`: short list of section categories with one-line descriptions.
-- Canonicals self-referencing per page, no trailing slashes.
-- `react-helmet-async` wired in `main.tsx` for per-route title/description/canonical.
+**Verification:** connect the endpoint from Claude Desktop, call `search_models({ query: "pegasus" })`, confirm it returns rows.
 
 ---
 
 ## Technical details
 
-**Stack stays:** Vite + React Router + Supabase. No framework migration.
+**Files touched:**
+- `scripts/prerender.ts` — remove per-fetch cap, page through reviews, emit `.md` twins.
+- `public/llms.txt` — add markdown index + MCP URL.
+- `public/robots.txt` — no functional change; add comment documenting `.md` variants.
+- `scripts/generate-sitemap.ts` — add `.md` URLs.
+- `src/lib/mcp/index.ts` — `defineMcp` entry.
+- `src/lib/mcp/tools/*.ts` — one file per tool.
+- `vite.config.ts` — add `mcpPlugin()`.
+- `index.html` — add `<link rel="mcp" href="…/functions/v1/mcp">`.
 
-**New files:**
-- `scripts/prerender.ts` — postbuild static HTML generator (uses Supabase anon client)
-- `scripts/generate-sitemap.ts` — prebuild sitemap generator
-- `src/pages/BestFor.tsx` — segment page
-- `src/lib/segmentStats.ts` — shared aggregate-sentence builder (used by both prerender script and the React page so output matches)
-- `src/lib/jsonld.ts` — JSON-LD builders
-- `public/llms.txt`, updated `public/robots.txt`
+**No schema changes.** All three channels read from existing `models`, `brands`, `reviews`, `model_summaries`, `model_segment_stats`, `segments`.
 
-**Edited files:**
-- `package.json` — `postbuild`/`prebuild` scripts, add `react-helmet-async`
-- `src/main.tsx` — `HelmetProvider`
-- `src/App.tsx` — add `/best/:slug` route
-- `src/pages/Model.tsx`, `src/pages/Brand.tsx`, `src/pages/Index.tsx` — answer-first lead, Helmet tags, "Last updated"
+**Build order:**
+1. Prerender changes + markdown dumps (biggest immediate LLM win, no infra).
+2. Sitemap + llms.txt updates.
+3. MCP server + edge function deploy.
+4. Verify with `curl` and one MCP client.
 
-**Migrations:**
-1. Add columns to `reviews` (all nullable, no defaults that touch existing rows)
-2. Create `segments` table + GRANTs + RLS (public select, admin write)
-3. Create `model_segment_stats` view + GRANT select to anon
-4. Seed `segments` with ~30 curated combos
+**Out of scope:**
+- Per-review permalinks (`/review/:id`) — could add later if you want individual reviews indexed as their own pages.
+- OAuth on MCP — everything exposed is already public, no need.
+- Real-time updates: prerender runs at build time; new reviews appear on next deploy. If you want faster freshness, we can add a nightly redeploy cron separately.
 
-**Hydration safety:** The prerender uses the same component output shape React produces on hydration to avoid mismatch warnings. Pure data-driven sections only — no `Date.now()` etc.
-
----
-
-## Build order
-
-1. Migrations: columns, view, segments table + seed.
-2. `react-helmet-async` + per-route head, answer-first leads, JSON-LD.
-3. `/best/:slug` route + page.
-4. `scripts/prerender.ts` postbuild.
-5. `scripts/generate-sitemap.ts` prebuild, `robots.txt`, `llms.txt`.
-6. Verify `curl` on a built page shows review content + JSON-LD.
-
-## Out of scope (flagged for later)
-
-- Full TanStack Start / Next.js migration (option C) — separate project when you're ready.
-- Re-collecting segmentation data on existing reviews. New columns will fill as new reviews arrive; old reviews stay as-is.
-- Admin UI for editing the `segments` table — can add later; seed is editable via SQL for now.
-
-Reply with **approve** to start, or call out anything to change.
+Reply **approve** to start, or call out anything to adjust.
