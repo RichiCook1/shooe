@@ -1,0 +1,184 @@
+{
+  "version": 1,
+  "sdk_version": "0.20.0",
+  "path": "/functions/v1/mcp",
+  "auth": {
+    "type": "none"
+  },
+  "mcp": {
+    "server": {
+      "name": "shoe-sherpa-mcp",
+      "version": "0.1.0",
+      "title": "Shoe Sherpa"
+    },
+    "tools": [
+      {
+        "name": "search_models",
+        "title": "Search shoe models",
+        "description": "Search the Shoe Sherpa catalog for running shoe models by name, optionally filtered by brand or category. Returns id, full name, aggregate rating, and review count.",
+        "annotations": {
+          "readOnlyHint": true,
+          "idempotentHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "type": "object",
+          "properties": {
+            "query": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Model name or partial name to search for."
+            },
+            "brand": {
+              "description": "Optional brand name filter (case-insensitive).",
+              "type": "string"
+            },
+            "category": {
+              "description": "Optional category filter (e.g. road, trail, race).",
+              "type": "string"
+            },
+            "limit": {
+              "description": "Max results (default 20).",
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 50
+            }
+          },
+          "required": [
+            "query"
+          ]
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "get_model",
+        "title": "Get shoe model detail",
+        "description": "Fetch the full spec sheet, aggregate rating, and up to 20 verified reviews for a specific shoe model by id.",
+        "annotations": {
+          "readOnlyHint": true,
+          "idempotentHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "type": "object",
+          "properties": {
+            "model_id": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+              "description": "Model id (uuid)."
+            },
+            "review_limit": {
+              "description": "How many reviews to include (default 20).",
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 50
+            }
+          },
+          "required": [
+            "model_id"
+          ]
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "list_reviews",
+        "title": "List reviews for a model",
+        "description": "Paginate through every verified review for a given model, newest first.",
+        "annotations": {
+          "readOnlyHint": true,
+          "idempotentHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "type": "object",
+          "properties": {
+            "model_id": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+              "description": "Model id (uuid)."
+            },
+            "limit": {
+              "description": "Page size (default 50).",
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            },
+            "offset": {
+              "description": "Offset for pagination (default 0).",
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            }
+          },
+          "required": [
+            "model_id"
+          ]
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "best_for",
+        "title": "Best shoes for a runner segment",
+        "description": "Return the ranked shortlist of shoes for a given runner segment (e.g. 'marathon-wide-feet', 'trail-50k-neutral'). Uses only models with at least 10 verified reviews in that segment.",
+        "annotations": {
+          "readOnlyHint": true,
+          "idempotentHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "type": "object",
+          "properties": {
+            "segment_slug": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Segment slug — see the segments list at /best."
+            },
+            "limit": {
+              "description": "Top N results (default 5).",
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 20
+            }
+          },
+          "required": [
+            "segment_slug"
+          ]
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "get_brand_facts",
+        "title": "Get verified brand facts",
+        "description": "Return the verified brand notes (fit, width options, technology claims) that Shoe Sherpa treats as source of truth for a brand. Look up by brand id OR brand name.",
+        "annotations": {
+          "readOnlyHint": true,
+          "idempotentHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "type": "object",
+          "properties": {
+            "brand_id": {
+              "description": "Brand id (uuid). Preferred.",
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            },
+            "brand_name": {
+              "description": "Brand name (case-insensitive) if id not known.",
+              "type": "string"
+            }
+          }
+        },
+        "outputSchema": null
+      }
+    ]
+  }
+}
