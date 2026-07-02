@@ -36,6 +36,7 @@ const AdminFields = lazy(() => import("./pages/admin/Fields"));
 const AdminUsers = lazy(() => import("./pages/admin/Users"));
 const AdminModeration = lazy(() => import("./pages/admin/Moderation"));
 const AdminAnalytics = lazy(() => import("./pages/admin/Analytics"));
+const AdminLlmVisibility = lazy(() => import("./pages/admin/LlmVisibility"));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -90,6 +91,7 @@ const App = () => (
                 <Route path="users" element={<AdminUsers />} />
                 <Route path="moderation" element={<AdminModeration />} />
                 <Route path="analytics" element={<AdminAnalytics />} />
+                <Route path="llm-visibility" element={<AdminLlmVisibility />} />
               </Route>
               <Route path="*" element={<NotFound />} />
             </Routes>

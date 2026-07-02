@@ -13,6 +13,7 @@ import {
   FileText,
   Trophy,
   Upload,
+  Radar,
 } from "lucide-react";
 import {
   Sidebar,
@@ -39,6 +40,7 @@ const items = [
   { title: "Users", url: "/admin/users", icon: Users },
   { title: "Moderation", url: "/admin/moderation", icon: Shield },
   { title: "Analytics", url: "/admin/analytics", icon: BarChart3 },
+  { title: "LLM Visibility", url: "/admin/llm-visibility", icon: Radar },
 ];
 
 export function AdminSidebar() {
