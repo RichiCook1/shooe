@@ -153,9 +153,23 @@ async function prerenderModels() {
     const fullName = [brandName, m.name].filter(Boolean).join(" ");
     const url = `${SITE}/model/${m.id}`;
     const reviewCount = s?.review_count ?? rs.length;
-    const lead = shoeSentence(brandName, m.name, reviewCount, s?.avg_rating ?? null);
+
+    // Extract top phrases from positive vs negative reviews for the lead.
+    const positives = rs.filter((r: any) => r.content && (r.rating ?? 0) >= 7);
+    const negatives = rs.filter((r: any) => r.content && (r.rating ?? 0) > 0 && (r.rating ?? 0) < 6);
+    const topPros = extractPhrases(positives.map((r: any) => r.content));
+    const topCons = extractPhrases(negatives.map((r: any) => r.content));
+    const topPro = topPros[0] ?? null;
+    const topCon = topCons[0] ?? null;
+
+    const lead = shoeSentence(brandName, m.name, reviewCount, s?.avg_rating ?? null, topPro, topCon);
     const title = `${fullName} Review (2026) — Shoe Sherpa`;
     const desc = lead.slice(0, 158);
+
+    // Pull-quote: highest-rated verified review with real text.
+    const pullQuote = [...rs]
+      .filter((r: any) => r.content && String(r.content).trim().length >= 40)
+      .sort((a: any, b: any) => (b.rating ?? 0) - (a.rating ?? 0))[0];
 
     modelIndex.push({ id: m.id, name: fullName, brand: brandName, count: reviewCount });
 
