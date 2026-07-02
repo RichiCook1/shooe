@@ -316,12 +316,7 @@ export default function LlmVisibility() {
             </CardContent>
           </Card>
 
-              >
-                <Input value={newQ} onChange={(e) => setNewQ(e.target.value)} placeholder="e.g. Best carbon race shoes 2026" />
-                <Button type="submit" disabled={!newQ.trim() || addProbe.isPending}>Add</Button>
-              </form>
-            </CardContent>
-          </Card>
+
 
           <Card>
             <CardHeader><CardTitle className="text-base">Probes</CardTitle></CardHeader>
