@@ -76,11 +76,53 @@ function writeFile(relPath: string, content: string) {
   writeFileSync(out, content);
 }
 
-function shoeSentence(brand: string | null, model: string, count: number, avg: number | null) {
+function shoeSentence(
+  brand: string | null,
+  model: string,
+  count: number,
+  avg: number | null,
+  topPro?: string | null,
+  topCon?: string | null,
+) {
   const name = [brand, model].filter(Boolean).join(" ");
   if (!count) return `${name} doesn't have community reviews yet — be the first to rate it.`;
   const rating = avg != null ? `averages ${Number(avg).toFixed(1)}/10` : "is rated by the community";
-  return `Across ${count} verified review${count === 1 ? "" : "s"}, the ${name} ${rating}.`;
+  const tail =
+    topPro && topCon
+      ? ` Most-cited pro: "${topPro}". Most-cited con: "${topCon}".`
+      : topPro
+        ? ` Most-cited pro: "${topPro}".`
+        : "";
+  return `Across ${count} verified review${count === 1 ? "" : "s"}, the ${name} ${rating}.${tail}`;
+}
+
+// Lightweight phrase-frequency extraction from review bodies. Not perfect —
+// picks the most common 2-3 word noun-ish phrases after stopword removal.
+const STOP = new Set(("the a an of and or but if to in on for with is are was were be been being " +
+  "this that these those i you he she it we they me him her us them my your his its our their " +
+  "not no yes so then just very really too much more most less least all some any each every " +
+  "have has had do does did will would could should can may might must about after before " +
+  "from into over under between while during than then also feel felt feels shoe shoes running run runs " +
+  "wear wore worn get got gets pair pairs mile miles km kms one two three four five ")
+  .split(/\s+/));
+
+function extractPhrases(texts: string[], n = 3): string[] {
+  const counts = new Map<string, number>();
+  for (const t of texts) {
+    const words = String(t).toLowerCase().replace(/[^a-z\s]/g, " ").split(/\s+/).filter(Boolean);
+    for (let i = 0; i < words.length - 1; i++) {
+      const w1 = words[i], w2 = words[i + 1];
+      if (STOP.has(w1) || STOP.has(w2)) continue;
+      if (w1.length < 3 || w2.length < 3) continue;
+      const bigram = `${w1} ${w2}`;
+      counts.set(bigram, (counts.get(bigram) ?? 0) + 1);
+    }
+  }
+  return [...counts.entries()]
+    .filter(([, c]) => c >= 2)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, n)
+    .map(([p]) => p);
 }
 
 async function prerenderModels() {
