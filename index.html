@@ -34,6 +34,20 @@
           navigator.serviceWorker.register('/sw.js');
         });
       }
+      // LLM crawler beacon: fires only when UA matches a known AI bot.
+      (function() {
+        try {
+          var ua = navigator.userAgent || '';
+          var re = /(GPTBot|OAI-SearchBot|ChatGPT-User|PerplexityBot|Perplexity-User|ClaudeBot|Claude-Web|Anthropic-AI|Google-Extended|Googlebot|Bingbot|CCBot|YouBot|Applebot-Extended|Amazonbot|meta-externalagent|DuckAssistBot|Bytespider|Diffbot)/i;
+          if (!re.test(ua)) return;
+          fetch('https://xezxeyrygwfbidcafoho.supabase.co/functions/v1/log-crawler-hit', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ua: ua, path: location.pathname, referer: document.referrer, source: 'beacon' }),
+            keepalive: true,
+          }).catch(function(){});
+        } catch(e){}
+      })();
     </script>
   </body>
 </html>

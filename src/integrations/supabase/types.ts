@@ -127,6 +127,77 @@ export type Database = {
         }
         Relationships: []
       }
+      citation_probe_runs: {
+        Row: {
+          answer_text: string | null
+          cited_urls: Json
+          error: string | null
+          id: string
+          model: string
+          position: number | null
+          probe_id: string
+          run_at: string
+          was_cited: boolean
+        }
+        Insert: {
+          answer_text?: string | null
+          cited_urls?: Json
+          error?: string | null
+          id?: string
+          model: string
+          position?: number | null
+          probe_id: string
+          run_at?: string
+          was_cited?: boolean
+        }
+        Update: {
+          answer_text?: string | null
+          cited_urls?: Json
+          error?: string | null
+          id?: string
+          model?: string
+          position?: number | null
+          probe_id?: string
+          run_at?: string
+          was_cited?: boolean
+        }
+        Relationships: [
+          {
+            foreignKeyName: "citation_probe_runs_probe_id_fkey"
+            columns: ["probe_id"]
+            isOneToOne: false
+            referencedRelation: "citation_probes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      citation_probes: {
+        Row: {
+          active: boolean
+          category: string | null
+          created_at: string
+          id: string
+          question: string
+          updated_at: string
+        }
+        Insert: {
+          active?: boolean
+          category?: string | null
+          created_at?: string
+          id?: string
+          question: string
+          updated_at?: string
+        }
+        Update: {
+          active?: boolean
+          category?: string | null
+          created_at?: string
+          id?: string
+          question?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       comments: {
         Row: {
           content: string
@@ -265,6 +336,42 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      llm_crawler_hits: {
+        Row: {
+          bot_name: string
+          created_at: string
+          id: string
+          ip_hash: string | null
+          metadata: Json | null
+          path: string | null
+          referer: string | null
+          source: string
+          user_agent: string | null
+        }
+        Insert: {
+          bot_name: string
+          created_at?: string
+          id?: string
+          ip_hash?: string | null
+          metadata?: Json | null
+          path?: string | null
+          referer?: string | null
+          source?: string
+          user_agent?: string | null
+        }
+        Update: {
+          bot_name?: string
+          created_at?: string
+          id?: string
+          ip_hash?: string | null
+          metadata?: Json | null
+          path?: string | null
+          referer?: string | null
+          source?: string
+          user_agent?: string | null
+        }
+        Relationships: []
       }
       messages: {
         Row: {
