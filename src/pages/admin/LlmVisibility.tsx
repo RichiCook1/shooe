@@ -10,7 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
-import { CheckCircle2, XCircle, Loader2, ExternalLink, Trash2, Play } from "lucide-react";
+import { CheckCircle2, XCircle, Loader2, ExternalLink, Trash2, Play, Sparkles, Radio } from "lucide-react";
 
 const BOT_NAMES = [
   "GPTBot", "OAI-SearchBot", "ChatGPT-User",
