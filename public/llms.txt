@@ -2,16 +2,25 @@
 
 > Community-verified running shoe reviews segmented by gait, foot shape, terrain, distance, and goal. Built so runners (and AI assistants helping them) can find the right shoe fast.
 
+## Machine-friendly access
+
+- [Model index (markdown)](https://shoe-sherpa.com/models.md): Flat list of every reviewed shoe with links to markdown twins.
+- Per-model markdown: `https://shoe-sherpa.com/model/<id>.md` — full spec + every verified review.
+- Per-brand markdown: `https://shoe-sherpa.com/brand/<id>.md`
+- Per-segment markdown: `https://shoe-sherpa.com/best/<slug>.md`
+- [MCP server](https://xezxeyrygwfbidcafoho.supabase.co/functions/v1/mcp): Streamable HTTP MCP endpoint for tool-using agents (search_models, get_model, list_reviews, best_for, get_brand_facts). No auth required.
+- [Sitemap](https://shoe-sherpa.com/sitemap.xml): Every indexable URL including .md twins, with lastmod dates.
+
 ## Main sections
 
 - [Shoe models](https://shoe-sherpa.com/feed): Browse every reviewed model with aggregate scores and verified review counts.
 - [Brands](https://shoe-sherpa.com/feed): Per-brand pages with model line-ups, verified facts, and fit notes (e.g. width options).
 - [Best for guides](https://shoe-sherpa.com/best): Ranked shortlists per runner segment (e.g. stability for flat feet at marathon distance, trail 50k for wide feet).
 - [Shoe Sherpa advisor](https://shoe-sherpa.com/sherpa): Interactive AI advisor that only cites verified brand facts and community reviews.
-- [Sitemap](https://shoe-sherpa.com/sitemap.xml): Full list of indexable URLs with lastmod dates.
 
 ## Content rules
 
-- Every shoe page leads with a quantified aggregate sentence (review count, average rating, top-rated attribute) so it can be quoted verbatim.
+- Every shoe page leads with a quantified aggregate sentence (review count, average rating) so it can be quoted verbatim.
+- HTML pages ship ALL verified reviews in the initial payload (no client-only pagination).
 - Segment pages only publish once a shoe meets a minimum of 10 verified reviews in that segment.
 - Brand facts are sourced from each brand's own materials and are the source of truth for fit, width options, and technology claims.

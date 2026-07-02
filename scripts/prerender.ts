@@ -1,6 +1,8 @@
-// Post-build prerender: writes static HTML for every public content route
-// (model, brand, best/segment) into dist/. Content is injected INSIDE
-// <div id="root">…</div> so crawlers see it. createRoot replaces it on hydration.
+// Post-build prerender: writes static HTML AND markdown twins for every
+// public content route (model, brand, best/segment) into dist/. HTML content
+// is injected INSIDE <div id="root">…</div> so crawlers see it. createRoot
+// replaces it on hydration. Markdown files are written to dist/<path>.md and
+// serve as clean, agent-friendly copies of the same data.
 // Run via: tsx scripts/prerender.ts (npm postbuild hook).
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
 import { resolve, dirname } from "node:path";
@@ -10,6 +12,7 @@ const SUPABASE_URL = process.env.VITE_SUPABASE_URL || "https://xezxeyrygwfbidcaf
 const ANON = process.env.VITE_SUPABASE_PUBLISHABLE_KEY || process.env.SUPABASE_ANON_KEY || "";
 const DIST = resolve(process.cwd(), "dist");
 const MIN_REVIEWS = 10;
+const PAGE_SIZE = 1000;
 
 if (!existsSync(DIST)) {
   console.warn("[prerender] dist/ not found, skipping");
@@ -25,10 +28,13 @@ const esc = (s: string) =>
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
 
-async function pg<T = any>(path: string): Promise<T[]> {
-  const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
-    headers: { apikey: ANON, Authorization: `Bearer ${ANON}` },
-  });
+async function pg<T = any>(path: string, rangeStart?: number, rangeEnd?: number): Promise<T[]> {
+  const headers: Record<string, string> = { apikey: ANON, Authorization: `Bearer ${ANON}` };
+  if (rangeStart != null && rangeEnd != null) {
+    headers["Range-Unit"] = "items";
+    headers["Range"] = `${rangeStart}-${rangeEnd}`;
+  }
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, { headers });
   if (!res.ok) {
     console.warn(`[prerender] ${path} -> ${res.status}`);
     return [];
@@ -36,11 +42,24 @@ async function pg<T = any>(path: string): Promise<T[]> {
   return res.json();
 }
 
+// Fetch ALL rows for a query by paging through with Range headers.
+async function pgAll<T = any>(path: string): Promise<T[]> {
+  const out: T[] = [];
+  let start = 0;
+  for (;;) {
+    const batch = await pg<T>(path, start, start + PAGE_SIZE - 1);
+    if (!batch.length) break;
+    out.push(...batch);
+    if (batch.length < PAGE_SIZE) break;
+    start += PAGE_SIZE;
+  }
+  return out;
+}
+
 function injectHead(html: string, headExtras: string) {
   return html.replace("</head>", `${headExtras}\n</head>`);
 }
 function injectRoot(html: string, bodyHtml: string) {
-  // existing pattern in vite template: <div id="root"></div>
   return html.replace(
     /<div id="root">[\s\S]*?<\/div>/,
     `<div id="root">${bodyHtml}</div>`
@@ -51,6 +70,11 @@ function writeRoute(routePath: string, html: string) {
   mkdirSync(dirname(out), { recursive: true });
   writeFileSync(out, html);
 }
+function writeFile(relPath: string, content: string) {
+  const out = resolve(DIST, relPath.replace(/^\//, ""));
+  mkdirSync(dirname(out), { recursive: true });
+  writeFileSync(out, content);
+}
 
 function shoeSentence(brand: string | null, model: string, count: number, avg: number | null) {
   const name = [brand, model].filter(Boolean).join(" ");
@@ -60,21 +84,25 @@ function shoeSentence(brand: string | null, model: string, count: number, avg: n
 }
 
 async function prerenderModels() {
-  const models = await pg<any>(
+  const models = await pgAll<any>(
     "models?select=id,name,image_url,category,release_year,weight_g,drop_mm,stack_height_mm,msrp,updated_at,brand:brands(id,name)"
   );
-  const summaries = await pg<any>("model_summaries?select=model_id,avg_rating,review_count,summary");
+  const summaries = await pgAll<any>("model_summaries?select=model_id,avg_rating,review_count,summary");
   const summaryMap = new Map(summaries.map((s: any) => [s.model_id, s]));
-  // pull a few reviews per model in one shot
-  const reviews = await pg<any>("reviews?select=model_id,rating,content,created_at,profile:profiles(display_name,username)&order=created_at.desc&limit=2000");
+
+  // Pull EVERY review, paginated (was capped at 2000 before).
+  const reviews = await pgAll<any>(
+    "reviews?select=model_id,rating,content,created_at,profile:profiles(display_name,username)&order=created_at.desc"
+  );
   const reviewsByModel = new Map<string, any[]>();
   for (const r of reviews) {
     if (!r.model_id) continue;
     const arr = reviewsByModel.get(r.model_id) ?? [];
-    if (arr.length < 5) arr.push(r);
+    arr.push(r);
     reviewsByModel.set(r.model_id, arr);
   }
 
+  const modelIndex: Array<{ id: string; name: string; brand: string | null; count: number }> = [];
   let count = 0;
   for (const m of models) {
     const s = summaryMap.get(m.id) as any;
@@ -87,6 +115,9 @@ async function prerenderModels() {
     const title = `${fullName} Review (2026) — Shoe Sherpa`;
     const desc = lead.slice(0, 158);
 
+    modelIndex.push({ id: m.id, name: fullName, brand: brandName, count: reviewCount });
+
+    // JSON-LD keeps 5-review cap (Google warns above that); visible HTML ships ALL reviews.
     const reviewsJsonLd = rs
       .filter((r) => r.content)
       .slice(0, 5)
@@ -119,6 +150,7 @@ async function prerenderModels() {
     <title>${esc(title)}</title>
     <meta name="description" content="${esc(desc)}" />
     <link rel="canonical" href="${url}" />
+    <link rel="alternate" type="text/markdown" href="${url}.md" />
     <meta property="og:title" content="${esc(title)}" />
     <meta property="og:description" content="${esc(desc)}" />
     <meta property="og:url" content="${url}" />
@@ -135,9 +167,15 @@ async function prerenderModels() {
       m.msrp && `<li>MSRP: $${m.msrp}</li>`,
     ].filter(Boolean).join("");
 
+    // ALL reviews in visible HTML (no slice).
     const reviewsHtml = rs
       .filter((r) => r.content)
-      .map((r) => `<article><p><strong>${esc(r.profile?.display_name || r.profile?.username || "Runner")}</strong>${r.rating ? ` rated ${r.rating}/10` : ""}</p><p>${esc(String(r.content).slice(0, 800))}</p></article>`)
+      .map((r) => {
+        const author = esc(r.profile?.display_name || r.profile?.username || "Runner");
+        const rating = r.rating ? ` rated ${r.rating}/10` : "";
+        const date = r.created_at ? ` on ${r.created_at.slice(0, 10)}` : "";
+        return `<article class="review"><p><strong>${author}</strong>${rating}${date}</p><p>${esc(String(r.content))}</p></article>`;
+      })
       .join("");
 
     const body = `
@@ -147,7 +185,7 @@ async function prerenderModels() {
         <p>${esc(lead)}</p>
         ${s?.summary ? `<p>${esc(s.summary)}</p>` : ""}
         ${specs ? `<ul>${specs}</ul>` : ""}
-        <h2>Verified reviews</h2>
+        <h2>Verified reviews (${rs.filter((r) => r.content).length})</h2>
         ${reviewsHtml || "<p>No reviews yet for this shoe.</p>"}
         <p><small>Last updated ${(m.updated_at || new Date().toISOString()).slice(0, 10)}</small></p>
       </main>
@@ -156,14 +194,69 @@ async function prerenderModels() {
     let html = injectHead(indexHtml, head);
     html = injectRoot(html, body);
     writeRoute(`/model/${m.id}`, html);
+
+    // Markdown twin at /model/<id>.md
+    const specLines = [
+      m.category && `- Category: ${String(m.category).replace(/_/g, " ")}`,
+      m.release_year && `- Release year: ${m.release_year}`,
+      m.weight_g && `- Weight: ${m.weight_g}g`,
+      m.drop_mm != null && `- Drop: ${m.drop_mm}mm`,
+      m.stack_height_mm && `- Stack: ${m.stack_height_mm}mm`,
+      m.msrp && `- MSRP: $${m.msrp}`,
+    ].filter(Boolean).join("\n");
+
+    const reviewsMd = rs
+      .filter((r) => r.content)
+      .map((r) => {
+        const author = r.profile?.display_name || r.profile?.username || "Runner";
+        const rating = r.rating ? ` — ${r.rating}/10` : "";
+        const date = r.created_at ? ` (${r.created_at.slice(0, 10)})` : "";
+        return `### ${author}${rating}${date}\n\n${String(r.content).trim()}`;
+      })
+      .join("\n\n---\n\n");
+
+    const md = [
+      `# ${fullName}`,
+      "",
+      lead,
+      "",
+      s?.summary ? `${s.summary}\n` : "",
+      specLines ? `## Specs\n\n${specLines}\n` : "",
+      `## Verified reviews (${rs.filter((r) => r.content).length})`,
+      "",
+      reviewsMd || "_No reviews yet for this shoe._",
+      "",
+      `---`,
+      `Source: ${url}`,
+      `Last updated: ${(m.updated_at || new Date().toISOString()).slice(0, 10)}`,
+      "",
+    ].join("\n");
+    writeFile(`/model/${m.id}.md`, md);
+
     count++;
   }
-  console.log(`[prerender] wrote ${count} model pages`);
+  console.log(`[prerender] wrote ${count} model pages (+ .md twins)`);
+
+  // /models.md — flat index for agents.
+  const indexMd = [
+    `# Shoe Sherpa — Model Index`,
+    "",
+    `Every reviewed running shoe in the Shoe Sherpa catalog. Markdown twins live at \`/model/<id>.md\`.`,
+    "",
+    `Total models: ${modelIndex.length}`,
+    "",
+    ...modelIndex
+      .sort((a, b) => b.count - a.count)
+      .map((m) => `- [${m.name}](${SITE}/model/${m.id}.md) — ${m.count} review${m.count === 1 ? "" : "s"}`),
+    "",
+  ].join("\n");
+  writeFile(`/models.md`, indexMd);
+  console.log(`[prerender] wrote /models.md index (${modelIndex.length} models)`);
 }
 
 async function prerenderBrands() {
-  const brands = await pg<any>("brands?select=id,name,notes,updated_at");
-  const models = await pg<any>("models?select=id,name,brand_id,category,release_year,image_url");
+  const brands = await pgAll<any>("brands?select=id,name,notes,updated_at");
+  const models = await pgAll<any>("models?select=id,name,brand_id,category,release_year,image_url");
   const byBrand = new Map<string, any[]>();
   for (const m of models) {
     const arr = byBrand.get(m.brand_id) ?? [];
@@ -184,6 +277,7 @@ async function prerenderBrands() {
     <title>${esc(title)}</title>
     <meta name="description" content="${esc(desc)}" />
     <link rel="canonical" href="${url}" />
+    <link rel="alternate" type="text/markdown" href="${url}.md" />
     <meta property="og:title" content="${esc(title)}" />
     <meta property="og:description" content="${esc(desc)}" />
     <meta property="og:url" content="${url}" />
@@ -206,21 +300,37 @@ async function prerenderBrands() {
     let html = injectHead(indexHtml, head);
     html = injectRoot(html, body);
     writeRoute(`/brand/${b.id}`, html);
+
+    // Markdown twin
+    const md = [
+      `# ${b.name}`,
+      "",
+      lead,
+      "",
+      b.notes ? `${b.notes}\n` : "",
+      list.length ? `## Models\n\n${list.map((m) => `- [${m.name}](${SITE}/model/${m.id}.md)${m.category ? ` — ${String(m.category).replace(/_/g, " ")}` : ""}${m.release_year ? ` (${m.release_year})` : ""}`).join("\n")}\n` : "",
+      `---`,
+      `Source: ${url}`,
+      `Last updated: ${(b.updated_at || new Date().toISOString()).slice(0, 10)}`,
+      "",
+    ].join("\n");
+    writeFile(`/brand/${b.id}.md`, md);
+
     count++;
   }
-  console.log(`[prerender] wrote ${count} brand pages`);
+  console.log(`[prerender] wrote ${count} brand pages (+ .md twins)`);
 }
 
 async function prerenderSegments() {
-  const segments = await pg<any>("segments?select=slug,title,description,updated_at");
-  const stats = await pg<any>(
+  const segments = await pgAll<any>("segments?select=slug,title,description,updated_at");
+  const stats = await pgAll<any>(
     `model_segment_stats?select=segment_slug,model_id,avg_rating,review_count&review_count=gte.${MIN_REVIEWS}&order=avg_rating.desc`
   );
   const modelIds = Array.from(new Set(stats.map((s: any) => s.model_id)));
   let models: any[] = [];
   if (modelIds.length) {
     const inList = `(${modelIds.map((id) => `"${id}"`).join(",")})`;
-    models = await pg<any>(`models?select=id,name,image_url,category,msrp,brand:brands(id,name)&id=in.${encodeURIComponent(inList)}`);
+    models = await pgAll<any>(`models?select=id,name,image_url,category,msrp,brand:brands(id,name)&id=in.${encodeURIComponent(inList)}`);
   }
   const modelMap = new Map(models.map((m) => [m.id, m]));
 
@@ -261,6 +371,7 @@ async function prerenderSegments() {
     <title>${esc(title)}</title>
     <meta name="description" content="${esc(desc)}" />
     <link rel="canonical" href="${url}" />
+    <link rel="alternate" type="text/markdown" href="${url}.md" />
     <meta property="og:title" content="${esc(title)}" />
     <meta property="og:description" content="${esc(desc)}" />
     <meta property="og:url" content="${url}" />
@@ -288,9 +399,31 @@ async function prerenderSegments() {
     let html = injectHead(indexHtml, head);
     html = injectRoot(html, body);
     writeRoute(`/best/${seg.slug}`, html);
+
+    // Markdown twin
+    const md = [
+      `# ${seg.title} (2026)`,
+      "",
+      lead,
+      "",
+      seg.description ? `${seg.description}\n` : "",
+      `## Ranked shortlist`,
+      "",
+      ...rows.map((r: any, i: number) => {
+        const name = [r.model.brand?.name, r.model.name].filter(Boolean).join(" ");
+        return `${i + 1}. **[${name}](${SITE}/model/${r.model.id}.md)** — ${r.review_count} reviews, ${Number(r.avg_rating).toFixed(1)}/10${r.model.msrp ? `, $${r.model.msrp}` : ""}`;
+      }),
+      "",
+      `---`,
+      `Source: ${url}`,
+      `Last updated: ${(seg.updated_at || new Date().toISOString()).slice(0, 10)}`,
+      "",
+    ].join("\n");
+    writeFile(`/best/${seg.slug}.md`, md);
+
     count++;
   }
-  console.log(`[prerender] wrote ${count} segment pages`);
+  console.log(`[prerender] wrote ${count} segment pages (+ .md twins)`);
 }
 
 async function main() {
