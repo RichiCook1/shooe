@@ -283,14 +283,29 @@ export default function AdminReviews() {
                     )}
                   </TableCell>
                   <TableCell className="text-sm">
-                    {r.is_guest ? (
-                      <Badge variant="outline">Guest</Badge>
-                    ) : (
-                      r.profiles?.display_name ||
-                      r.profiles?.username ||
-                      <span className="text-muted-foreground">Unknown</span>
-                    )}
+                    <div className="flex items-center gap-2">
+                      {(() => {
+                        const src = sourceOf(r);
+                        return (
+                          <Badge
+                            variant={src.key === "seed" ? "destructive" : "outline"}
+                            className="text-[10px]"
+                          >
+                            {src.label}
+                          </Badge>
+                        );
+                      })()}
+                      {!r.is_guest && (
+                        <span>
+                          {r.profiles?.display_name ||
+                            r.profiles?.username || (
+                              <span className="text-muted-foreground">Unknown</span>
+                            )}
+                        </span>
+                      )}
+                    </div>
                   </TableCell>
+
                   <TableCell>
                     {r.rating ? (
                       <span className="inline-flex items-center gap-1 text-sm">
