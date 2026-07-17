@@ -30,11 +30,39 @@ import {
 
 const PAGE_SIZE = 25;
 
+type SourceFilter = "all" | "seed" | "interview" | "import" | "guest" | "user";
+
+const SEED_PREFIX = "guest-";
+
+function sourceOf(r: { guest_session_id: string | null; is_guest: boolean }): {
+  key: Exclude<SourceFilter, "all">;
+  label: string;
+} {
+  const s = r.guest_session_id || "";
+  if (/^guest-\d+/.test(s)) return { key: "seed", label: "Seed" };
+  if (s.startsWith("interview:")) return { key: "interview", label: "Interview" };
+  if (s.startsWith("import:")) return { key: "import", label: "Import" };
+  if (r.is_guest) return { key: "guest", label: "Guest" };
+  return { key: "user", label: "User" };
+}
+
 export default function AdminReviews() {
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(0);
-  const [source, setSource] = useState<"all" | "guest" | "user">("all");
+  const [source, setSource] = useState<SourceFilter>("all");
   const [verified, setVerified] = useState<"all" | "yes" | "no">("all");
+  const [bulkDeleting, setBulkDeleting] = useState(false);
+
+  const { data: seedCount = 0, refetch: refetchSeedCount } = useQuery({
+    queryKey: ["admin-reviews-seed-count"],
+    queryFn: async () => {
+      const { count } = await supabase
+        .from("reviews")
+        .select("id", { count: "exact", head: true })
+        .like("guest_session_id", `${SEED_PREFIX}%`);
+      return count ?? 0;
+    },
+  });
 
   const { data, isLoading, refetch } = useQuery({
     queryKey: ["admin-reviews", search, page, source, verified],
@@ -43,7 +71,7 @@ export default function AdminReviews() {
         .from("reviews")
         .select(
           `id, content, rating, created_at, verified, is_guest, location, media_urls,
-           user_id, model_id,
+           user_id, model_id, guest_session_id,
            models:model_id ( id, name, brands:brand_id ( id, name ) )`,
           { count: "exact" }
         )
@@ -53,8 +81,11 @@ export default function AdminReviews() {
       if (search.trim()) {
         q = q.ilike("content", `%${search.trim()}%`);
       }
-      if (source === "guest") q = q.eq("is_guest", true);
-      if (source === "user") q = q.eq("is_guest", false);
+      if (source === "seed") q = q.like("guest_session_id", `${SEED_PREFIX}%`);
+      else if (source === "interview") q = q.like("guest_session_id", "interview:%");
+      else if (source === "import") q = q.like("guest_session_id", "import:%");
+      else if (source === "guest") q = q.eq("is_guest", true);
+      else if (source === "user") q = q.eq("is_guest", false);
       if (verified === "yes") q = q.eq("verified", true);
       if (verified === "no") q = q.eq("verified", false);
 
@@ -89,6 +120,7 @@ export default function AdminReviews() {
     if (error) return toast.error(error.message);
     toast.success("Review deleted");
     refetch();
+    refetchSeedCount();
   }
 
   async function toggleVerified(id: string, current: boolean) {
@@ -98,6 +130,19 @@ export default function AdminReviews() {
       .eq("id", id);
     if (error) return toast.error(error.message);
     refetch();
+  }
+
+  async function deleteAllSeeded() {
+    setBulkDeleting(true);
+    const { error } = await supabase
+      .from("reviews")
+      .delete()
+      .like("guest_session_id", `${SEED_PREFIX}%`);
+    setBulkDeleting(false);
+    if (error) return toast.error(error.message);
+    toast.success(`Deleted ${seedCount} seeded test reviews`);
+    refetch();
+    refetchSeedCount();
   }
 
   return (
