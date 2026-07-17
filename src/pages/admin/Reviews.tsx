@@ -44,8 +44,7 @@ export default function AdminReviews() {
         .select(
           `id, content, rating, created_at, verified, is_guest, location, media_urls,
            user_id, model_id,
-           models:model_id ( id, name, brands:brand_id ( id, name ) ),
-           profiles:user_id ( username, display_name )`,
+           models:model_id ( id, name, brands:brand_id ( id, name ) )`,
           { count: "exact" }
         )
         .order("created_at", { ascending: false })
@@ -61,7 +60,23 @@ export default function AdminReviews() {
 
       const { data, error, count } = await q;
       if (error) throw error;
-      return { rows: data ?? [], count: count ?? 0 };
+
+      const userIds = Array.from(
+        new Set((data ?? []).map((r: any) => r.user_id).filter(Boolean))
+      );
+      let profileMap: Record<string, any> = {};
+      if (userIds.length) {
+        const { data: profs } = await supabase
+          .from("profiles")
+          .select("user_id, username, display_name")
+          .in("user_id", userIds);
+        profileMap = Object.fromEntries((profs ?? []).map((p: any) => [p.user_id, p]));
+      }
+      const rows = (data ?? []).map((r: any) => ({
+        ...r,
+        profiles: r.user_id ? profileMap[r.user_id] : null,
+      }));
+      return { rows, count: count ?? 0 };
     },
   });
 
