@@ -83,6 +83,7 @@ const App = () => (
                 <Route index element={<AdminOverview />} />
                 <Route path="interview" element={<AdminInterview />} />
                 <Route path="drafts" element={<AdminDrafts />} />
+                <Route path="reviews" element={<AdminReviews />} />
                 <Route path="leaderboard" element={<AdminLeaderboard />} />
                 <Route path="import-reviews" element={<AdminImportReviews />} />
                 <Route path="catalog" element={<AdminCatalog />} />
