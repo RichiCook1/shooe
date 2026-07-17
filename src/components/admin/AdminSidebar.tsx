@@ -14,6 +14,7 @@ import {
   Trophy,
   Upload,
   Radar,
+  Star,
 } from "lucide-react";
 import {
   Sidebar,
