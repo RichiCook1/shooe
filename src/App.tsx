@@ -37,6 +37,7 @@ const AdminUsers = lazy(() => import("./pages/admin/Users"));
 const AdminModeration = lazy(() => import("./pages/admin/Moderation"));
 const AdminAnalytics = lazy(() => import("./pages/admin/Analytics"));
 const AdminLlmVisibility = lazy(() => import("./pages/admin/LlmVisibility"));
+const AdminReviews = lazy(() => import("./pages/admin/Reviews"));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -82,6 +83,7 @@ const App = () => (
                 <Route index element={<AdminOverview />} />
                 <Route path="interview" element={<AdminInterview />} />
                 <Route path="drafts" element={<AdminDrafts />} />
+                <Route path="reviews" element={<AdminReviews />} />
                 <Route path="leaderboard" element={<AdminLeaderboard />} />
                 <Route path="import-reviews" element={<AdminImportReviews />} />
                 <Route path="catalog" element={<AdminCatalog />} />

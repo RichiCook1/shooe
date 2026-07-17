@@ -14,6 +14,7 @@ import {
   Trophy,
   Upload,
   Radar,
+  Star,
 } from "lucide-react";
 import {
   Sidebar,
@@ -31,6 +32,7 @@ const items = [
   { title: "Overview", url: "/admin", icon: LayoutDashboard, end: true },
   { title: "Interview", url: "/admin/interview", icon: Mic },
   { title: "Drafts", url: "/admin/drafts", icon: FileText },
+  { title: "Reviews", url: "/admin/reviews", icon: Star },
   { title: "Leaderboard", url: "/admin/leaderboard", icon: Trophy },
   { title: "Import Reviews", url: "/admin/import-reviews", icon: Upload },
   { title: "Catalog", url: "/admin/catalog", icon: Footprints, end: true },
