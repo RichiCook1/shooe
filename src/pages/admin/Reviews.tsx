@@ -162,18 +162,27 @@ export default function AdminReviews() {
           }}
           className="max-w-sm"
         />
-        <div className="flex gap-2">
-          {(["all", "user", "guest"] as const).map((s) => (
+        <div className="flex gap-2 flex-wrap">
+          {(
+            [
+              ["all", "All"],
+              ["seed", `Seed${seedCount ? ` (${seedCount})` : ""}`],
+              ["interview", "Interview"],
+              ["import", "Import"],
+              ["user", "Users"],
+              ["guest", "Guests"],
+            ] as const
+          ).map(([s, label]) => (
             <Button
               key={s}
               size="sm"
               variant={source === s ? "default" : "outline"}
               onClick={() => {
-                setSource(s);
+                setSource(s as SourceFilter);
                 setPage(0);
               }}
             >
-              {s === "all" ? "All" : s === "user" ? "Users" : "Guests"}
+              {label}
             </Button>
           ))}
         </div>
@@ -192,7 +201,39 @@ export default function AdminReviews() {
             </Button>
           ))}
         </div>
+        {seedCount > 0 && (
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button
+                size="sm"
+                variant="destructive"
+                className="ml-auto"
+                disabled={bulkDeleting}
+              >
+                <Trash2 className="h-4 w-4 mr-1" />
+                Delete {seedCount} seeded test reviews
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Delete all seeded test reviews?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  This permanently deletes {seedCount} reviews whose session id
+                  starts with <code>guest-</code> (the demo/test data). Real
+                  guest and user reviews are unaffected. This cannot be undone.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogAction onClick={deleteAllSeeded}>
+                  Delete {seedCount} reviews
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        )}
       </Card>
+
 
       <Card className="overflow-x-auto">
         <Table>
