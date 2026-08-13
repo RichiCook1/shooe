@@ -9,7 +9,7 @@ import { resolve, dirname } from "node:path";
 
 const SITE = "https://shoe-sherpa.com";
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || "https://xezxeyrygwfbidcafoho.supabase.co";
-const ANON = process.env.VITE_SUPABASE_PUBLISHABLE_KEY || process.env.SUPABASE_ANON_KEY || "";
+const ANON = process.env.VITE_SUPABASE_PUBLISHABLE_KEY || process.env.SUPABASE_ANON_KEY || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhlenhleXJ5Z3dmYmlkY2Fmb2hvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzIyODk5MDksImV4cCI6MjA4Nzg2NTkwOX0.WhNDLXcXEfjAd4CnkkKQY0tKBVBTsZE1MlpKERgqn6w";
 const DIST = resolve(process.cwd(), "dist");
 const MIN_REVIEWS = 10;
 const PAGE_SIZE = 1000;
