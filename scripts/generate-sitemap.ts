@@ -28,8 +28,8 @@ async function main() {
   const today = new Date().toISOString().slice(0, 10);
   const staticUrls = ["/", "/feed", "/sherpa", "/review", "/models.md"].map((p) => urlEntry(`${SITE}${p}`, today));
 
-  const models = await pg<any>("models?select=id,updated_at");
-  const brands = await pg<any>("brands?select=id,updated_at");
+  const models = await pg<any>("models?select=id,updated_at:created_at");
+  const brands = await pg<any>("brands?select=id,updated_at:created_at");
   const segments = await pg<any>("segments?select=slug,updated_at");
 
   const modelUrls = models.flatMap((m) => [
