@@ -127,7 +127,7 @@ function extractPhrases(texts: string[], n = 3): string[] {
 
 async function prerenderModels() {
   const models = await pgAll<any>(
-    "models?select=id,name,image_url,category,release_year,weight_g,drop_mm,stack_height_mm,msrp,updated_at,brand:brands(id,name)"
+    "models?select=id,name,image_url,category,release_year,weight_g,drop_mm,stack_height_mm,msrp,updated_at:created_at,brand:brands(id,name)"
   );
   const summaries = await pgAll<any>("model_summaries?select=model_id,avg_rating,review_count,summary");
   const summaryMap = new Map(summaries.map((s: any) => [s.model_id, s]));
@@ -365,7 +365,7 @@ async function prerenderModels() {
 }
 
 async function prerenderBrands() {
-  const brands = await pgAll<any>("brands?select=id,name,notes,updated_at");
+  const brands = await pgAll<any>("brands?select=id,name,notes,updated_at:created_at");
   const models = await pgAll<any>("models?select=id,name,brand_id,category,release_year,image_url");
   const byBrand = new Map<string, any[]>();
   for (const m of models) {
